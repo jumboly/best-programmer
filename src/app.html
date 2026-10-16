@@ -1,0 +1,1388 @@
+<title>FLOWSTATE IDE</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;700&family=JetBrains+Mono:ital,wght@0,400;0,700;1,400&family=Noto+Sans+JP:wght@400;700&display=swap">
+<style>
+/* Layout: one IDE window filling the screen — explorer | editors over terminal | telemetry; HUD overlays float above */
+:root {
+  /* 映画のIDEは常に暗い部屋で光っているので、意図的にダーク単一テーマにする */
+  color-scheme: dark;
+  --bg: #07091a;
+  --win: #0d1026;
+  --panel: #11152f;
+  --line: #1e2448;
+  --fg: #cad1f2;
+  --dim: #5c6596;
+  --amber: #ffb454;
+  --cyan: #5ccfe6;
+  --violet: #c792ea;
+  --blue: #82aaff;
+  --green: #9be37f;
+  --red: #ff6b81;
+  --pink: #f07178;
+  --f-code: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+  --f-hud: "Chakra Petch", "JetBrains Mono", ui-monospace, monospace;
+  --f-ui: "Noto Sans JP", "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
+}
+* { box-sizing: border-box; }
+/* .intro などが display を指定しているため、hidden 属性を確実に優先させる */
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--f-ui); overflow: hidden; }
+a { color: var(--cyan); }
+
+.app {
+  height: 100%;
+  padding-block: 12px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid;
+}
+.win {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  background: var(--win);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  transition: box-shadow .4s, border-color .4s;
+}
+body.flow .win { border-color: var(--violet); box-shadow: 0 0 0 1px var(--violet), 0 0 60px -10px var(--violet); }
+body.legend .win { border-color: var(--amber); box-shadow: 0 0 0 1px var(--amber), 0 0 90px -10px var(--amber); }
+
+/* ---------- title bar ---------- */
+.top {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding: 8px 14px; border-bottom: 1px solid var(--line); background: var(--panel);
+  font-family: var(--f-hud); font-size: 13px; letter-spacing: .04em;
+}
+.lights { display: flex; gap: 6px; }
+.lights i { width: 11px; height: 11px; border-radius: 50%; background: var(--line); }
+.lights i:nth-child(1) { background: var(--red); }
+.lights i:nth-child(2) { background: var(--amber); }
+.lights i:nth-child(3) { background: var(--green); }
+.top .name { font-weight: 700; color: var(--fg); }
+.top .path { color: var(--dim); }
+.top .spacer { flex: 1; }
+.chip { color: var(--dim); display: flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; }
+.chip b { color: var(--fg); font-weight: 500; }
+.top select {
+  font: 500 12.5px var(--f-hud); letter-spacing: .04em; color: var(--fg); background: var(--win);
+  border: 1px solid var(--line); border-radius: 5px; padding: 3px 6px; cursor: pointer;
+}
+.top select:focus-visible { outline: 1px solid var(--cyan); }
+.meter { width: 120px; height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; }
+.meter i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--cyan), var(--violet), var(--amber)); transition: width .15s; }
+
+/* ---------- main grid ---------- */
+.main { min-height: 0; display: grid; grid-template-columns: 220px minmax(0, 1fr) 236px; }
+.side, .tele { min-height: 0; overflow: hidden; background: var(--panel); font-size: 12.5px; }
+.side { border-right: 1px solid var(--line); padding: 12px 0; display: grid; grid-template-rows: auto auto minmax(0, 1fr); }
+.tele { border-left: 1px solid var(--line); padding: 12px 14px; display: flex; flex-direction: column; gap: 14px; }
+.label { font-family: var(--f-hud); font-size: 11px; letter-spacing: .14em; color: var(--dim); text-transform: uppercase; }
+.side .label { padding: 0 14px 4px; display: flex; justify-content: space-between; gap: 8px; }
+.side .label b { color: var(--fg); font-weight: 500; }
+.progress { margin: 4px 14px 10px; height: 3px; background: var(--line); border-radius: 2px; overflow: hidden; }
+.progress i { display: block; height: 100%; width: 0; background: var(--green); transition: width .3s; }
+.tree { font-family: var(--f-code); font-size: 12px; overflow-y: auto; scrollbar-width: thin; padding-bottom: 12px; }
+.tree .dir { padding: 3px 14px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tree .file {
+  display: flex; gap: 6px; align-items: center; width: 100%; padding: 2px 14px 2px 26px;
+  color: var(--fg); white-space: nowrap; overflow: hidden;
+}
+.tree .file span { overflow: hidden; text-overflow: ellipsis; }
+.tree .file i { font-style: normal; flex: none; width: 1em; text-align: center; }
+.tree .file.done i { color: var(--green); }
+.tree .file.writing { color: var(--amber); background: rgba(255, 180, 84, .07); }
+.tree .file.writing i { animation: blink 1s steps(1) infinite; }
+.tree .file.lic { color: var(--cyan); }
+.tree button.file { all: unset; box-sizing: border-box; display: flex; gap: 6px; align-items: center; width: 100%; padding: 2px 14px 2px 26px; cursor: pointer; color: var(--cyan); white-space: nowrap; overflow: hidden; }
+.tree button.file:hover { background: var(--line); }
+.tree button.file:focus-visible { outline: 1px solid var(--cyan); outline-offset: -1px; }
+.tree .file.born { animation: born 1.2s ease-out; }
+@keyframes born { from { background: rgba(155, 227, 127, .35); } to { background: transparent; } }
+
+.center { min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr) minmax(110px, 30%); position: relative; }
+.editors { min-height: 0; display: flex; gap: 1px; background: var(--line); }
+.pane { flex: 1; min-width: 0; min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); background: var(--win); }
+.tab {
+  display: flex; align-items: center; gap: 8px; padding: 7px 14px; min-width: 0;
+  font-family: var(--f-code); font-size: 12px; color: var(--dim); background: var(--panel); border-bottom: 1px solid var(--line);
+}
+.tab .fname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pane.active .tab { color: var(--fg); box-shadow: inset 0 2px 0 var(--amber); }
+.tab .mod { color: var(--amber); flex: none; }
+.pane.idle .tab .mod { color: var(--green); }
+.tab .lang { margin-left: auto; flex: none; font-family: var(--f-hud); letter-spacing: .1em; font-size: 10.5px; }
+.code {
+  overflow: hidden; padding: 10px 14px 40px 0; cursor: text;
+  font-family: var(--f-code); font-size: 13.5px; line-height: 1.6; tab-size: 4;
+}
+.ln { position: relative; padding-left: 4.2em; white-space: pre-wrap; word-break: break-all; min-height: 1.6em; }
+.ln::before { content: attr(data-n); position: absolute; left: 0; width: 3em; text-align: right; color: var(--dim); opacity: .55; }
+.ln.cur { background: rgba(130, 170, 255, .06); }
+.ln.cur::before { opacity: 1; color: var(--fg); }
+.ln.eof { color: var(--dim); font-style: italic; }
+.caret { display: inline-block; width: .6em; height: 1.2em; margin-bottom: -.25em; background: var(--amber); animation: blink 1s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+/* syntax */
+.k { color: var(--violet); }
+.s { color: var(--green); }
+.n { color: var(--amber); }
+.t { color: var(--cyan); }
+.f { color: var(--blue); }
+.a { color: var(--red); }
+.v { color: var(--pink); }
+.c { color: var(--dim); font-style: italic; }
+.p { color: #8a93c4; }
+
+/* ---------- terminal ---------- */
+.term { min-height: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); border-top: 1px solid var(--line); background: #0a0d20; }
+.term .tabs { display: flex; gap: 18px; padding: 6px 14px; font-family: var(--f-hud); font-size: 11px; letter-spacing: .14em; color: var(--dim); }
+.term .tabs b { color: var(--fg); font-weight: 500; border-bottom: 1px solid var(--amber); }
+.tout { overflow: hidden; padding: 2px 14px 10px; font-family: var(--f-code); font-size: 12.5px; line-height: 1.55; display: flex; flex-direction: column; justify-content: flex-end; }
+.tl { white-space: pre-wrap; word-break: break-all; }
+.tl.cmd { color: var(--fg); }
+.tl.cmd::before { content: "❯ "; color: var(--violet); }
+.tl.ok { color: var(--green); }
+.tl.warn { color: var(--amber); }
+.tl.err { color: var(--red); }
+.tl.hi { color: var(--cyan); }
+.tl.dim { color: var(--dim); }
+
+/* ---------- telemetry ---------- */
+.stats { display: grid; gap: 7px; }
+.stat { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.stat span { color: var(--dim); }
+.stat b { font-family: var(--f-hud); font-size: 15px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.stat b.big { font-size: 22px; color: var(--amber); }
+#spark { width: 100%; height: 54px; display: block; }
+.cores { display: grid; grid-template-columns: repeat(16, 1fr); gap: 3px; height: 46px; align-items: end; }
+.cores i { display: block; background: var(--cyan); border-radius: 1px; height: 6%; transition: height .12s; opacity: .85; }
+body.flow .cores i { background: var(--violet); }
+.rank { font-family: var(--f-hud); font-size: 20px; font-weight: 700; letter-spacing: .06em; color: var(--fg); }
+.rank small { display: block; font-family: var(--f-ui); font-size: 11.5px; font-weight: 400; color: var(--dim); letter-spacing: 0; margin-top: 2px; }
+
+/* ---------- status bar ---------- */
+.bar {
+  display: flex; align-items: center; gap: 6px; padding: 5px 8px;
+  background: var(--panel); border-top: 1px solid var(--line); overflow-x: auto; scrollbar-width: none;
+}
+.bar::-webkit-scrollbar { display: none; }
+.bar button {
+  all: unset; cursor: pointer; flex: none; display: flex; align-items: center; gap: 7px;
+  padding: 5px 10px; border-radius: 5px; font-size: 12.5px; color: var(--fg); white-space: nowrap;
+}
+.bar button:hover { background: var(--line); }
+.bar button:focus-visible { outline: 1px solid var(--cyan); }
+.bar button[aria-busy="true"] { color: var(--amber); }
+.bar kbd { font-family: var(--f-hud); font-size: 10.5px; padding: 1px 5px; border: 1px solid var(--line); border-radius: 3px; color: var(--dim); }
+.bar .pos { margin-left: auto; padding: 0 8px; font-family: var(--f-code); font-size: 11.5px; color: var(--dim); white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+/* ---------- HUD overlays ---------- */
+#fx { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 30; }
+.combo {
+  position: absolute; top: 44px; right: 22px; z-index: 20; text-align: right; pointer-events: none;
+  font-family: var(--f-hud); line-height: 1; opacity: 0; transition: opacity .3s;
+}
+.combo.show { opacity: 1; }
+.combo .num { font-size: 56px; font-weight: 700; color: var(--fg); text-shadow: 0 0 18px var(--violet); font-variant-numeric: tabular-nums; }
+.combo .num.pop { animation: pop .12s ease-out; }
+.combo .tier { font-size: 14px; letter-spacing: .3em; color: var(--amber); margin-top: 4px; }
+@keyframes pop { from { transform: scale(1.25); } to { transform: scale(1); } }
+
+.mission {
+  position: absolute; top: 44px; left: 50%; transform: translateX(-50%); z-index: 22;
+  width: min(440px, calc(100% - 32px)); padding: 12px 14px; border: 1px solid var(--red); border-radius: 8px;
+  background: rgba(30, 10, 22, .92); box-shadow: 0 0 40px -8px var(--red);
+}
+.mission .head { display: flex; justify-content: space-between; gap: 10px; font-family: var(--f-hud); letter-spacing: .1em; font-size: 12px; color: var(--red); }
+.mission .title { font-weight: 700; font-size: 15px; margin: 4px 0 8px; }
+.mission .prog { height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; }
+.mission .prog i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--red), var(--amber), var(--green)); transition: width .1s; }
+.mission .hint { font-size: 11.5px; color: var(--dim); margin-top: 6px; }
+
+.banner {
+  position: fixed; left: 50%; top: 42%; z-index: 40; transform: translate(-50%, -50%);
+  text-align: center; pointer-events: none; opacity: 0; width: min(92vw, 900px);
+}
+.banner.show { animation: bannerIn 2.4s cubic-bezier(.2, .9, .2, 1) forwards; }
+.banner h2 { margin: 0; font-family: var(--f-hud); font-weight: 700; font-size: clamp(34px, 7vw, 88px); letter-spacing: .06em; line-height: 1; text-wrap: balance; color: var(--fg); }
+.banner p { margin: 14px 0 0; font-size: clamp(13px, 1.8vw, 17px); color: var(--fg); }
+.banner.ok h2 { color: var(--green); text-shadow: 0 0 30px rgba(155, 227, 127, .5); }
+.banner.deploy h2 { color: var(--amber); text-shadow: 0 0 40px rgba(255, 180, 84, .6); }
+.banner.flow h2 { color: var(--violet); text-shadow: 0 0 40px rgba(199, 146, 234, .7); }
+.banner.warn h2 { color: var(--red); text-shadow: 0 0 30px rgba(255, 107, 129, .5); }
+@keyframes bannerIn {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(1.4); filter: blur(8px); }
+  12% { opacity: 1; transform: translate(-50%, -50%) scale(1); filter: blur(0); }
+  80% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -54%); }
+}
+.flash { position: fixed; inset: 0; z-index: 35; pointer-events: none; opacity: 0; }
+.flash.go { animation: flash .5s ease-out; }
+@keyframes flash { from { opacity: .35; } to { opacity: 0; } }
+
+.chat {
+  position: fixed; z-index: 45; display: grid; gap: 8px; width: min(320px, calc(100vw - 32px));
+  right: calc(max(16px, env(safe-area-inset-right, 0px)) + 14px); bottom: calc(env(safe-area-inset-bottom, 0px) + 60px);
+}
+.msg {
+  display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 10px; padding: 10px 12px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px; font-size: 13px;
+  box-shadow: 0 12px 30px -10px rgba(0, 0, 0, .7); animation: slide .3s ease-out;
+}
+.msg.urgent { border-color: var(--red); }
+.msg .av { width: 30px; height: 30px; border-radius: 6px; display: grid; place-items: center; font-weight: 700; font-size: 12px; color: var(--bg); background: var(--cyan); }
+.msg.urgent .av { background: var(--red); }
+.msg .who { font-size: 11.5px; color: var(--dim); }
+.msg .who b { color: var(--fg); margin-right: 6px; }
+.msg .txt { line-height: 1.5; margin-top: 2px; }
+.msg.out { animation: fade .4s forwards; }
+@keyframes slide { from { opacity: 0; transform: translateX(30px); } }
+@keyframes fade { to { opacity: 0; transform: translateX(30px); } }
+
+/* ---------- intro ---------- */
+.intro {
+  position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; overflow-y: auto;
+  background: rgba(5, 7, 20, .86); backdrop-filter: blur(3px);
+  padding-block: 24px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.intro .card { max-width: 720px; display: grid; gap: 18px; }
+.intro .eyebrow { font-family: var(--f-hud); letter-spacing: .3em; font-size: 12px; color: var(--amber); }
+.intro h1 { margin: 0; font-family: var(--f-hud); font-weight: 700; font-size: clamp(40px, 9vw, 76px); line-height: .95; letter-spacing: .03em; }
+.intro h1 em { font-style: normal; color: var(--violet); }
+.intro p { margin: 0; line-height: 1.8; font-size: 15px; max-width: 60ch; }
+.intro ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; font-size: 13.5px; color: var(--fg); }
+.intro li { display: flex; gap: 10px; align-items: baseline; }
+.intro li kbd { flex: none; min-width: 74px; font-family: var(--f-hud); font-size: 11.5px; color: var(--cyan); }
+.picker { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 6px; }
+.picker button {
+  all: unset; box-sizing: border-box; cursor: pointer; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--win); display: grid; gap: 2px;
+}
+.picker button b { font-family: var(--f-hud); font-size: 14px; font-weight: 700; letter-spacing: .04em; }
+.picker button span { font-family: var(--f-code); font-size: 11px; color: var(--dim); }
+.picker button:hover, .picker button[aria-pressed="true"] { border-color: var(--amber); }
+.picker button[aria-pressed="true"] b { color: var(--amber); }
+.picker button:focus-visible { outline: 1px solid var(--cyan); }
+.intro .foot { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: baseline; justify-content: space-between; }
+.intro .go { font-family: var(--f-hud); letter-spacing: .3em; color: var(--green); animation: blink 1.2s steps(1) infinite; }
+.linkbtn { all: unset; cursor: pointer; font-size: 12.5px; color: var(--cyan); text-decoration: underline; text-underline-offset: 3px; }
+.linkbtn:focus-visible { outline: 1px solid var(--cyan); }
+
+/* ---------- credits ---------- */
+.credits {
+  position: fixed; inset: 0; z-index: 60; display: grid; place-items: center;
+  background: rgba(5, 7, 20, .88);
+  padding-block: 24px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.credits .sheet {
+  width: min(780px, 100%); max-height: 100%; overflow-y: auto; background: var(--panel);
+  border: 1px solid var(--line); border-radius: 10px; padding: 22px 24px;
+}
+.credits header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.credits h2 { margin: 0; font-family: var(--f-hud); font-size: 22px; letter-spacing: .06em; }
+.credits .lead { font-size: 13.5px; line-height: 1.8; color: var(--fg); max-width: 65ch; }
+.credits .proj { border-top: 1px solid var(--line); padding: 12px 0; display: grid; gap: 4px; }
+.credits .proj h3 { margin: 0; font-size: 15px; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.credits .proj h3 small { font-family: var(--f-hud); font-size: 11px; letter-spacing: .12em; color: var(--dim); font-weight: 500; }
+.credits .meta { font-family: var(--f-code); font-size: 12px; color: var(--dim); overflow-wrap: anywhere; }
+.credits .meta b { color: var(--green); font-weight: 400; }
+.credits details summary { cursor: pointer; font-size: 12.5px; color: var(--cyan); }
+.credits pre { margin: 8px 0 0; padding: 12px; max-height: 280px; overflow: auto; background: var(--win); border: 1px solid var(--line); border-radius: 6px; font: 11.5px/1.55 var(--f-code); white-space: pre-wrap; }
+.credits .close { all: unset; cursor: pointer; font-family: var(--f-hud); letter-spacing: .1em; font-size: 12px; padding: 5px 10px; border: 1px solid var(--line); border-radius: 5px; }
+.credits .close:focus-visible { outline: 1px solid var(--cyan); }
+
+.sink { position: fixed; left: 0; bottom: 0; width: 1px; height: 1px; opacity: 0; font-size: 16px; border: 0; padding: 0; resize: none; }
+
+@media (max-width: 860px) {
+  .main { grid-template-columns: minmax(0, 1fr); }
+  .side, .tele { display: none; }
+  .editors { flex-direction: column; }
+  .top .path, .top .clock, .top .branch { display: none; }
+  .meter { width: 70px; }
+  .code { font-size: 12.5px; }
+  .combo .num { font-size: 40px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .banner.show { animation-duration: 2.4s; animation-timing-function: steps(1); }
+  .caret, .intro .go, .tree .file.writing i { animation: none; }
+}
+</style>
+
+<div class="app">
+  <div class="win" id="win">
+    <header class="top">
+      <div class="lights" aria-hidden="true"><i></i><i></i><i></i></div>
+      <span class="name">FLOWSTATE IDE</span>
+      <span class="path" id="wsPath">~/work</span>
+      <span class="spacer"></span>
+      <label class="chip">PROJECT <select id="projSel" aria-label="プロジェクトを切り替える"></select></label>
+      <span class="chip branch">⎇ <b>main</b></span>
+      <span class="chip">FLOW <span class="meter"><i id="flowMeter"></i></span></span>
+      <span class="chip clock"><b id="clock">--:--:--</b></span>
+    </header>
+
+    <div class="main">
+      <nav class="side" aria-label="ファイル">
+        <div class="label"><span>Explorer</span><b id="fileCount">0 / 0</b></div>
+        <div class="progress"><i id="projProg"></i></div>
+        <div class="tree" id="tree"></div>
+      </nav>
+
+      <section class="center">
+        <div class="editors" id="editors"></div>
+        <div class="combo" id="combo" aria-hidden="true"><div class="num" id="comboNum">0</div><div class="tier" id="comboTier"></div></div>
+        <div class="mission" id="mission" hidden>
+          <div class="head"><span>⚠ INCIDENT</span><span id="mTime">20.0s</span></div>
+          <div class="title" id="mTitle"></div>
+          <div class="prog"><i id="mProg"></i></div>
+          <div class="hint">キーボードを連打して対応せよ</div>
+        </div>
+        <div class="term">
+          <div class="tabs"><b>TERMINAL</b><span>OUTPUT</span><span>PROBLEMS 0</span></div>
+          <div class="tout" id="tout" aria-live="off"></div>
+        </div>
+      </section>
+
+      <aside class="tele" aria-label="今日の成果">
+        <div class="label">Telemetry</div>
+        <div class="rank" id="rank">INTERN<small>まだ準備運動</small></div>
+        <div class="stats">
+          <div class="stat"><span>書いた行数</span><b class="big" id="sLoc">0</b></div>
+          <div class="stat"><span>LOC / 分</span><b id="sRate">0</b></div>
+          <div class="stat"><span>完成ファイル</span><b id="sFiles">0</b></div>
+          <div class="stat"><span>完成プロジェクト</span><b id="sProjects">0</b></div>
+          <div class="stat"><span>最大コンボ</span><b id="sCombo">0</b></div>
+          <div class="stat"><span>潰したバグ</span><b id="sBugs">0</b></div>
+          <div class="stat"><span>コーヒー</span><b id="sCoffee">1 杯</b></div>
+          <div class="stat"><span>推定市場価値</span><b id="sValue">¥800万</b></div>
+        </div>
+        <div>
+          <div class="label" style="margin-bottom:6px">Throughput</div>
+          <canvas id="spark"></canvas>
+        </div>
+        <div>
+          <div class="label" style="margin-bottom:6px">CPU · 16 cores</div>
+          <div class="cores" id="cores"></div>
+        </div>
+      </aside>
+    </div>
+
+    <footer class="bar">
+      <button type="button" data-cmd="build"><kbd>F1</kbd>ビルド</button>
+      <button type="button" data-cmd="test"><kbd>F2</kbd>テスト</button>
+      <button type="button" data-cmd="deploy"><kbd>F3</kbd>本番デプロイ</button>
+      <button type="button" data-cmd="split"><kbd>F4</kbd>画面分割</button>
+      <button type="button" data-cmd="mission"><kbd>F5</kbd>緊急案件</button>
+      <button type="button" data-cmd="sound" id="soundBtn"><kbd>F6</kbd>サウンド OFF</button>
+      <button type="button" data-cmd="credits"><kbd>F7</kbd>ライセンス</button>
+      <span class="pos" id="pos"></span>
+    </footer>
+  </div>
+</div>
+
+<canvas id="fx"></canvas>
+<div class="flash" id="flash"></div>
+<div class="banner" id="banner"><h2 id="bTitle"></h2><p id="bSub"></p></div>
+<div class="chat" id="chat" aria-live="polite"></div>
+<textarea class="sink" id="sink" aria-label="キーボード入力" autocomplete="off" autocapitalize="off" spellcheck="false"></textarea>
+
+<div class="intro" id="intro">
+  <div class="card">
+    <div class="eyebrow">// ENTER THE ZONE</div>
+    <h1>FLOW<em>STATE</em><br>IDE</h1>
+    <p>キーボードを好きなように叩くだけ。実在するオープンソースのコードが指先から溢れ出し、ファイルが 1 つずつ生まれてプロジェクトが組み上がっていきます。今日のあなたは伝説のプログラマーです。</p>
+    <div class="picker" id="picker" role="group" aria-label="書く言語を選ぶ"></div>
+    <ul>
+      <li><kbd>ANY KEY</kbd>コードを書く（速く叩くほどコンボが伸びる）</li>
+      <li><kbd>← →</kbd>言語を選ぶ（スタート前）</li>
+      <li><kbd>F1〜F3</kbd>ビルド / テスト / 本番デプロイ</li>
+      <li><kbd>F4 / F5</kbd>画面分割 / 緊急案件</li>
+      <li><kbd>F6 / F7</kbd>サウンド / 収録 OSS のライセンス</li>
+      <li><kbd>Alt + 1〜7</kbd>Fキーが使いにくい時はこちら</li>
+    </ul>
+    <div class="foot">
+      <div class="go">PRESS ANY KEY / TAP TO START</div>
+      <button type="button" class="linkbtn" id="introCredits">収録しているオープンソースとライセンス</button>
+    </div>
+  </div>
+</div>
+
+<div class="credits" id="credits" hidden role="dialog" aria-modal="true" aria-labelledby="creditsTitle">
+  <div class="sheet">
+    <header><h2 id="creditsTitle">OPEN SOURCE CREDITS</h2><button type="button" class="close" id="creditsClose">ESC 閉じる</button></header>
+    <p class="lead" id="creditsLead"></p>
+    <div id="creditsList"></div>
+  </div>
+</div>
+
+<script id="oss-sources" type="application/json">__OSS_SOURCES__</script>
+<script>
+(() => {
+  "use strict";
+  const $ = (s) => document.querySelector(s);
+  const rnd = (a, b) => a + Math.random() * (b - a);
+  const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const base = (path) => path.split("/").pop();
+
+  // ビルド時に tools/build.mjs が実在 OSS のソースを埋め込む
+  const DATA = JSON.parse(document.getElementById("oss-sources").textContent);
+  const PROJECTS = DATA.projects;
+
+  // ---------------------------------------------------------------- syntax highlighting
+  // 言語ごとの差分だけを持たせ、トークナイザ本体は共通化する
+  const C_LIKE = { block: true, line: ["//"], chars: true };
+  const LANG = {
+    C: { ...C_LIKE, pre: true },
+    "C++": { ...C_LIKE, pre: true },
+    "C#": { ...C_LIKE, pre: true, verbatim: true },
+    Java: { ...C_LIKE, anno: true },
+    JavaScript: { block: true, line: ["//"], tpl: true },
+    TypeScript: { block: true, line: ["//"], tpl: true, anno: true },
+    Python: { line: ["#"], triple: true, anno: true },
+    Go: { ...C_LIKE, tpl: true },
+    Rust: { ...C_LIKE, attr: true },
+    Ruby: { line: ["#"], sym: true, vars: /^[@$][A-Za-z_]\w*/ },
+    PHP: { block: true, line: ["//", "#"], vars: /^\$[A-Za-z_]\w*/ },
+    Swift: { block: true, line: ["//"], anno: true },
+    Kotlin: { ...C_LIKE, anno: true, triple: true },
+    Shell: { line: ["#"], shell: true, tpl: true, vars: /^\$(?:\{[^}]*\}?|[A-Za-z_]\w*|[0-9@#?*!$-])/ },
+  };
+  const KW = new Set((
+    // C / C++ / C#
+    "auto break case char const continue default do double else enum extern float for goto if inline int long register restrict return short signed sizeof static struct switch typedef union unsigned void volatile while " +
+    "class namespace template typename public private protected virtual override final explicit operator new delete this throw try catch noexcept constexpr nullptr using friend mutable bool true false " +
+    "abstract as base checked decimal delegate event fixed foreach implicit in interface internal is lock null object out params readonly ref sbyte sealed stackalloc string uint ulong unchecked unsafe ushort var get set value async await yield where " +
+    // Java / Kotlin / Swift
+    "boolean byte extends implements import instanceof native package strictfp super synchronized throws transient " +
+    "fun val when init companion data sealed suspend open lateinit internal reified inline crossinline typealias " +
+    "func let guard defer extension protocol self Self init deinit subscript associatedtype fileprivate weak mutating some any nil throws rethrows " +
+    // JS / TS / Go / Rust
+    "function const export from of typeof undefined declare type keyof readonly satisfies " +
+    "chan go map range select struct fallthrough " +
+    "fn impl mod pub crate trait move dyn loop match mut " +
+    // Python / Ruby / PHP / Shell
+    "def lambda pass raise except finally elif not and or with global nonlocal del assert None True False " +
+    "end begin rescue ensure module unless until then do elsif alias undef require attr_reader attr_accessor " +
+    "echo require_once include_once array callable " +
+    "fi esac done local export return shift"
+  ).split(" "));
+
+  // 1 行ぶんを HTML 化する。st は前の行から続く複数行コメント／文字列の状態
+  function hl(line, lang, st) {
+    const L = LANG[lang] || C_LIKE;
+    let out = "", i = 0;
+    const put = (cls, s) => { out += cls ? `<span class="${cls}">${esc(s)}</span>` : esc(s); i += s.length; };
+    if (st) {
+      const j = line.indexOf(st.end);
+      if (j < 0) { put(st.cls, line); return [out, st]; }
+      put(st.cls, line.slice(0, j + st.end.length));
+      st = null;
+    }
+    while (i < line.length) {
+      const rest = line.slice(i), c = line[i], prev = line[i - 1] || "";
+      let m;
+      if (L.block && rest.startsWith("/*")) {
+        const j = rest.indexOf("*/", 2);
+        if (j < 0) { put("c", rest); return [out, { end: "*/", cls: "c" }]; }
+        put("c", rest.slice(0, j + 2)); continue;
+      }
+      if (L.triple && (rest.startsWith('"""') || rest.startsWith("'''"))) {
+        const q = rest.slice(0, 3), j = rest.indexOf(q, 3);
+        if (j < 0) { put("s", rest); return [out, { end: q, cls: "s" }]; }
+        put("s", rest.slice(0, j + 3)); continue;
+      }
+      if (L.line.some((t) => rest.startsWith(t)) && (!L.shell || !prev || /\s/.test(prev))) { put("c", rest); break; }
+      if (L.pre && c === "#" && !line.slice(0, i).trim()) { put("a", /^#\s*\w*/.exec(rest)[0]); continue; }
+      if (L.attr && (m = /^#!?\[[^\]]*\]?/.exec(rest))) { put("a", m[0]); continue; }
+      if (L.anno && (m = /^@[A-Za-z_][\w.]*/.exec(rest))) { put("a", m[0]); continue; }
+      if (L.vars && (m = L.vars.exec(rest))) { put("v", m[0]); continue; }
+      if (L.sym && (m = /^:[A-Za-z_]\w*[?!]?/.exec(rest)) && !/[\w:]/.test(prev)) { put("n", m[0]); continue; }
+      if (c === '"' || (c === "`" && L.tpl) || (c === "'" && !L.chars)) {
+        // 行をまたぐテンプレート文字列は稀なので、行末で打ち切る簡略化をしている
+        let j = i + 1;
+        while (j < line.length && line[j] !== c) j += line[j] === "\\" && !(L.verbatim && prev === "@") ? 2 : 1;
+        put("s", line.slice(i, j + 1)); continue;
+      }
+      if (c === "'" && (m = /^'(?:\\[^']{1,8}|[^'\\])'/.exec(rest))) { put("s", m[0]); continue; }
+      if (!/\w/.test(prev) && (m = /^(?:0[xX][0-9a-fA-F_]+|\d[\d_]*(?:\.\d+)?(?:[eE][+-]?\d+)?)[A-Za-z]*/.exec(rest))) { put("n", m[0]); continue; }
+      if ((m = /^[A-Za-z_]\w*/.exec(rest))) {
+        const id = m[0], next = line.slice(i + id.length);
+        const cls = KW.has(id) ? "k" : /^[A-Z]/.test(id) ? "t" : /^!?\(/.test(next) ? "f" : "";
+        put(cls, id); continue;
+      }
+      if ((m = /^\s+/.exec(rest))) { put("", m[0]); continue; }
+      put("p", c);
+    }
+    return [out, st];
+  }
+
+  // ---------------------------------------------------------------- project state
+  let project = null;
+  let queue = [];             // まだ誰も書き始めていないファイル
+  const fileState = new Map(); // path -> "writing" | "done"
+  let bornPath = null;
+  let switching = false;      // プロジェクト完成〜次のプロジェクト開始までの演出中
+  let switchTimer = 0;
+  let filesDone = 0, projectsDone = 0;
+
+  // ---------------------------------------------------------------- editor panes
+  const editorsEl = $("#editors");
+  const panes = [];
+  let active = null;
+
+  class Pane {
+    constructor() {
+      this.el = document.createElement("div");
+      this.el.className = "pane";
+      this.el.innerHTML = `<div class="tab"><span class="fname"></span><span class="mod">●</span><span class="lang"></span></div><div class="code"></div>`;
+      this.body = this.el.querySelector(".code");
+      editorsEl.appendChild(this.el);
+      this.el.addEventListener("pointerdown", () => { if (!this.idle) setActive(this); });
+      this.file = null;
+      this.idle = true;
+    }
+    open(file) {
+      this.file = file;
+      this.idle = false;
+      this.el.classList.remove("idle");
+      this.pos = 0;
+      this.n = 0;
+      this.state = null;
+      this.lineEl = null;
+      this.body.textContent = "";
+      this.el.querySelector(".fname").textContent = file.path;
+      this.el.querySelector(".mod").textContent = "●";
+      this.el.querySelector(".lang").textContent = project.lang.toUpperCase();
+      this.newLine();
+      this.render();
+    }
+    finish() {
+      this.newLine(true);
+      const eof = document.createElement("div");
+      eof.className = "ln eof";
+      eof.dataset.n = "";
+      eof.textContent = this.file.truncated ? `— ${this.n - 1} 行を抜粋（全 ${this.file.totalLines} 行）。保存しました —` : "— 保存しました —";
+      this.body.appendChild(eof);
+      this.body.scrollTop = this.body.scrollHeight;
+      this.idle = true;
+      this.el.classList.add("idle");
+      this.el.querySelector(".mod").textContent = "✓";
+    }
+    newLine(last = false) {
+      if (this.lineEl) {
+        this.lineEl.classList.remove("cur");
+        const [html, st] = hl(this.lineText, project.lang, this.state);
+        this.lineEl.innerHTML = html;
+        this.state = st;
+      }
+      if (last) return;
+      this.n++;
+      const el = document.createElement("div");
+      el.className = "ln cur";
+      el.dataset.n = this.n;
+      this.body.appendChild(el);
+      this.lineEl = el;
+      this.lineText = "";
+      // 長いファイルでも DOM が膨らみ続けないよう、画面外の古い行を間引く
+      if (this.body.childElementCount > 260) {
+        for (let k = 0; k < 60; k++) this.body.firstChild.remove();
+      }
+    }
+    // 戻り値: 書き進めた行数。ファイルを書き終えたら this.idle が true になる
+    type(k) {
+      if (this.idle) return 0;
+      const src = this.file.text;
+      let lines = 0;
+      for (let i = 0; i < k && this.pos < src.length; i++) {
+        const ch = src[this.pos++];
+        if (ch === "\n") {
+          this.newLine();
+          lines++;
+          // インデントと空行は IDE が自動で入れる体なので、打鍵数を消費させない
+          while (src[this.pos] === " " || src[this.pos] === "\t") this.lineText += src[this.pos++];
+        } else {
+          this.lineText += ch;
+        }
+      }
+      if (this.pos >= src.length) {
+        this.finish();
+        onFileDone(this);
+      } else {
+        this.render();
+      }
+      return lines;
+    }
+    render() {
+      this.lineEl.innerHTML = hl(this.lineText, project.lang, this.state)[0] + '<span class="caret"></span>';
+      this.body.scrollTop = this.body.scrollHeight;
+    }
+    caretPoint() {
+      const c = this.lineEl && this.lineEl.querySelector(".caret");
+      if (!c) return null;
+      const r = c.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    }
+  }
+
+  function setActive(p) {
+    active = p;
+    panes.forEach((q) => q.el.classList.toggle("active", q === p));
+  }
+
+  // 空いたペインに次のファイルを割り当てる。残りが無ければ false
+  function assignNext(pane) {
+    const f = queue.shift();
+    if (!f) return false;
+    fileState.set(f.path, "writing");
+    bornPath = f.path;
+    pane.open(f);
+    term(`  create  ${f.path}`, "hi");
+    renderTree();
+    return true;
+  }
+
+  function onFileDone(pane) {
+    const f = pane.file;
+    fileState.set(f.path, "done");
+    filesDone++;
+    term(`"${f.path}" ${pane.n - 1}L written`, "dim");
+    term(`[main ${Math.random().toString(16).slice(2, 9)}] add ${base(f.path)}`, "ok");
+    blip(1568, 0.12, "sine");
+    if (!assignNext(pane)) {
+      renderTree();
+      const next = panes.find((p) => !p.idle);
+      if (next) setActive(next);
+      else projectComplete();
+    }
+  }
+
+  function loadProject(p, { quiet = false } = {}) {
+    project = p;
+    queue = p.files.filter((f) => !f.license);
+    fileState.clear();
+    p.files.filter((f) => f.license).forEach((f) => fileState.set(f.path, "done"));
+    bornPath = null;
+    switching = false;
+    // 完成演出の途中で手動切替された場合に、予約済みの自動切替が後から割り込まないようにする
+    clearTimeout(switchTimer);
+    $("#wsPath").textContent = `~/work/${p.id}`;
+    $("#projSel").value = p.id;
+    if (!quiet) {
+      cmd(`git init ${p.id} && cd ${p.id}`);
+      term(`Initialized empty Git repository · ${p.name} (${p.lang}) · ${p.license}`, "dim");
+      p.files.filter((f) => f.license).forEach((f) => term(`  create  ${f.path}`, "hi"));
+    }
+    if (!panes.length) panes.push(new Pane());
+    panes.forEach((pane) => { if (!assignNext(pane)) pane.el.remove(); });
+    for (let i = panes.length - 1; i > 0; i--) if (!panes[i].file || panes[i].idle) panes.splice(i, 1);
+    setActive(panes[0]);
+    renderTree();
+  }
+
+  function projectComplete() {
+    if (switching) return;
+    switching = true;
+    projectsDone++;
+    const n = project.files.filter((f) => !f.license).length;
+    term(`✓ ${project.name}: ${n} files written. Ready to ship.`, "ok");
+    banner("PROJECT COMPLETE", `${project.name}（${project.lang}）の ${n} ファイルを書き上げた`, "deploy");
+    flash(COLORS[0]);
+    confetti();
+    fanfare();
+    setTimeout(() => chat(pick(["CTO", "テックリード", "PM"]), `${project.name} をもう書き終えたんですか…？次は ${nextProject().lang} をお願いします`), 900);
+    switchTimer = setTimeout(() => {
+      term("", "");
+      loadProject(nextProject());
+    }, 3800);
+  }
+  const nextProject = () => PROJECTS[(PROJECTS.indexOf(project) + 1) % PROJECTS.length];
+
+  function renderTree() {
+    const tree = $("#tree");
+    const files = project.files.filter((f) => fileState.has(f.path));
+    const dirs = new Map();
+    for (const f of files) {
+      const d = f.path.includes("/") ? f.path.slice(0, f.path.lastIndexOf("/")) : "";
+      if (!dirs.has(d)) dirs.set(d, []);
+      dirs.get(d).push(f);
+    }
+    let html = `<div class="dir">▾ ${esc(project.id)}/</div>`;
+    for (const d of [...dirs.keys()].sort()) {
+      if (d) html += `<div class="dir" style="padding-left:26px">▾ ${esc(d)}/</div>`;
+      for (const f of dirs.get(d)) {
+        const pad = d ? "padding-left:38px" : "";
+        const born = f.path === bornPath ? " born" : "";
+        if (f.license) {
+          html += `<button type="button" class="file lic${born}" style="${pad}" data-lic="${esc(project.id)}" title="ライセンス全文を開く"><i>§</i><span>${esc(base(f.path))}</span></button>`;
+        } else {
+          const st = fileState.get(f.path);
+          html += `<div class="file ${st}${born}" style="${pad}"><i>${st === "done" ? "✓" : "●"}</i><span>${esc(base(f.path))}</span></div>`;
+        }
+      }
+    }
+    tree.innerHTML = html;
+    bornPath = null;
+    const total = project.files.filter((f) => !f.license).length;
+    const done = project.files.filter((f) => !f.license && fileState.get(f.path) === "done").length;
+    $("#fileCount").textContent = `${done} / ${total}`;
+    $("#projProg").style.width = (done / total) * 100 + "%";
+  }
+  $("#tree").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-lic]");
+    if (b) openCredits(b.dataset.lic);
+  });
+
+  // ---------------------------------------------------------------- terminal
+  const tout = $("#tout");
+  function term(text, cls = "") {
+    const el = document.createElement("div");
+    el.className = "tl " + cls;
+    el.textContent = text || " ";
+    tout.appendChild(el);
+    while (tout.childElementCount > 80) tout.firstChild.remove();
+  }
+  const cmd = (t) => term(t, "cmd");
+
+  // ---------------------------------------------------------------- HUD: banner, flash, chat
+  const bannerEl = $("#banner");
+  function banner(title, sub, kind = "") {
+    $("#bTitle").textContent = title;
+    $("#bSub").textContent = sub;
+    bannerEl.className = "banner " + kind;
+    void bannerEl.offsetWidth; // アニメーションを確実に最初から再生し直すためのリフロー
+    bannerEl.classList.add("show");
+  }
+  function flash(color) {
+    const f = $("#flash");
+    f.style.background = color;
+    f.classList.remove("go");
+    void f.offsetWidth;
+    f.classList.add("go");
+  }
+
+  const chatEl = $("#chat");
+  function chat(from, text, urgent = false) {
+    const el = document.createElement("div");
+    el.className = "msg" + (urgent ? " urgent" : "");
+    const now = new Date();
+    el.innerHTML = `<div class="av">${esc(from.slice(0, 2))}</div><div><div class="who"><b>${esc(from)}</b>${now.getHours()}:${String(now.getMinutes()).padStart(2, "0")}</div><div class="txt">${esc(text)}</div></div>`;
+    chatEl.appendChild(el);
+    while (chatEl.childElementCount > 3) chatEl.firstChild.remove();
+    setTimeout(() => { el.classList.add("out"); setTimeout(() => el.remove(), 400); }, urgent ? 9000 : 6500);
+    blip(880, 0.08, "sine");
+    setTimeout(() => blip(1320, 0.1, "sine"), 90);
+  }
+
+  // ---------------------------------------------------------------- sound (opt-in: ブラウザは操作前の音声再生を許可しない)
+  let audio = null, soundOn = false;
+  function blip(freq, dur = 0.03, type = "triangle", vol = 0.04) {
+    if (!soundOn || !audio) return;
+    const t = audio.currentTime;
+    const o = audio.createOscillator(), g = audio.createGain();
+    o.type = type;
+    o.frequency.value = freq;
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g).connect(audio.destination);
+    o.start(t);
+    o.stop(t + dur + 0.02);
+  }
+  // 音源ファイルを持たずにメカニカルキーボードの「カチャ」を合成する。
+  // 毎回フィルタ周波数や再生位置を揺らすことで、同じ音の連続に聞こえないようにしている
+  let noiseBuf = null, bus = null;
+  function clack(heavy = false) {
+    if (!soundOn || !audio) return;
+    const t = audio.currentTime;
+    if (!noiseBuf) {
+      noiseBuf = audio.createBuffer(1, Math.floor(audio.sampleRate * 0.2), audio.sampleRate);
+      const d = noiseBuf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      // 高速連打で音が重なっても割れないよう、全打鍵音をコンプレッサーに通す
+      bus = audio.createDynamicsCompressor();
+      bus.connect(audio.destination);
+    }
+    const out = audio.createGain();
+    out.gain.value = heavy ? 0.55 : 0.4;
+    out.connect(bus);
+
+    // 1) スイッチの接点が鳴る高域の「カチッ」
+    const click = audio.createBufferSource();
+    click.buffer = noiseBuf;
+    click.playbackRate.value = rnd(0.85, 1.15);
+    const bp = audio.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.frequency.value = rnd(2800, 4200);
+    bp.Q.value = 1.2;
+    const cg = audio.createGain();
+    cg.gain.setValueAtTime(0.9, t);
+    cg.gain.exponentialRampToValueAtTime(0.001, t + 0.025);
+    click.connect(bp).connect(cg).connect(out);
+    click.start(t, rnd(0, 0.1), 0.03);
+
+    // 2) キーキャップが底を打つ低域の「コトッ」（わずかに遅らせると打鍵の二段感が出る）
+    const thock = audio.createBufferSource();
+    thock.buffer = noiseBuf;
+    const lp = audio.createBiquadFilter();
+    lp.type = "lowpass";
+    lp.frequency.value = heavy ? 500 : 900;
+    const tg = audio.createGain();
+    tg.gain.setValueAtTime(0.0001, t);
+    tg.gain.setValueAtTime(0.0001, t + 0.008);
+    tg.gain.exponentialRampToValueAtTime(heavy ? 1.2 : 0.7, t + 0.012);
+    tg.gain.exponentialRampToValueAtTime(0.001, t + (heavy ? 0.08 : 0.05));
+    thock.connect(lp).connect(tg).connect(out);
+    thock.start(t, rnd(0, 0.08), 0.09);
+
+    const o = audio.createOscillator(), og = audio.createGain();
+    o.frequency.setValueAtTime(heavy ? 140 : 210, t);
+    o.frequency.exponentialRampToValueAtTime(heavy ? 70 : 120, t + 0.06);
+    og.gain.setValueAtTime(0.0001, t);
+    og.gain.exponentialRampToValueAtTime(heavy ? 0.5 : 0.25, t + 0.012);
+    og.gain.exponentialRampToValueAtTime(0.001, t + 0.07);
+    o.connect(og).connect(out);
+    o.start(t);
+    o.stop(t + 0.1);
+  }
+  const fanfare = () => [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => blip(f, 0.25, "square", 0.03), i * 90));
+  function toggleSound() {
+    soundOn = !soundOn;
+    if (soundOn && !audio) {
+      try { audio = new (window.AudioContext || window.webkitAudioContext)(); } catch { soundOn = false; }
+    }
+    $("#soundBtn").lastChild.textContent = soundOn ? "サウンド ON" : "サウンド OFF";
+    if (soundOn) clack(true);
+  }
+
+  // ---------------------------------------------------------------- particles
+  const fx = $("#fx"), ctx = fx.getContext("2d");
+  const css = getComputedStyle(document.documentElement);
+  const COLORS = ["--amber", "--cyan", "--violet", "--blue", "--green"].map((v) => css.getPropertyValue(v).trim());
+  const parts = [];
+  function resize() {
+    const dpr = window.devicePixelRatio || 1;
+    fx.width = innerWidth * dpr;
+    fx.height = innerHeight * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  addEventListener("resize", resize);
+  resize();
+  function burst(pt, n, power = 1) {
+    if (!pt || reduceMotion) return;
+    for (let i = 0; i < n && parts.length < 700; i++) {
+      parts.push({ x: pt.x, y: pt.y, vx: rnd(-3, 3) * power, vy: rnd(-5, -0.5) * power, life: 1, c: pick(COLORS), s: rnd(1.5, 4) });
+    }
+  }
+  function confetti() {
+    if (reduceMotion) return;
+    for (let i = 0; i < 260; i++) {
+      parts.push({ x: rnd(0, innerWidth), y: rnd(-80, -10), vx: rnd(-1.5, 1.5), vy: rnd(1, 5), life: 1.8, c: pick(COLORS), s: rnd(3, 7) });
+    }
+  }
+  function drawParticles() {
+    ctx.clearRect(0, 0, innerWidth, innerHeight);
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const p = parts[i];
+      p.vy += 0.18;
+      p.x += p.vx;
+      p.y += p.vy;
+      p.life -= 0.022;
+      if (p.life <= 0 || p.y > innerHeight + 20) { parts.splice(i, 1); continue; }
+      ctx.globalAlpha = Math.min(1, p.life);
+      ctx.fillStyle = p.c;
+      ctx.fillRect(p.x, p.y, p.s, p.s);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // ---------------------------------------------------------------- game state
+  let started = false;
+  let combo = 0, maxCombo = 0, lastHit = 0, tierIdx = -1;
+  let loc = 0, bugs = 0;
+  let nextPraiseAt = 70, nextMissionAt = Infinity;
+  const hitTimes = [], lineTimes = [];
+
+  const TIERS = [
+    { at: 10, name: "WARMING UP" },
+    { at: 30, name: "ON FIRE" },
+    { at: 60, name: "FLOW STATE", banner: ["FLOW STATE", "雑念が消えた。コードしか見えない。"] },
+    { at: 120, name: "10x ENGINEER", banner: ["10x ENGINEER", "チーム 10 人分の速度に到達"] },
+    { at: 250, name: "LEGENDARY", banner: ["LEGENDARY", "この週末で OS を書き上げる勢い"] },
+    { at: 500, name: "SINGULARITY", banner: ["SINGULARITY", "あなたがコードを書いているのか、コードがあなたを書いているのか"] },
+  ];
+  const RANKS = [
+    [0, "INTERN", "まだ準備運動"],
+    [40, "JUNIOR", "Hello, World を卒業"],
+    [120, "SENIOR", "レビューで頼られる存在"],
+    [300, "STAFF", "設計判断を任される"],
+    [600, "PRINCIPAL", "社内に伝説が語り継がれる"],
+    [1200, "10x ENGINEER", "採用ページの顔になる"],
+    [2500, "POLYGLOT", "14 言語を自在に操る"],
+    [5000, "LEGEND", "OSS の README に名前が載る"],
+  ];
+  const PRAISE = [
+    ["PM", "え、もう終わったんですか…？見積もり 3 週間でしたよね"],
+    ["テックリード", "そのコード、社内勉強会の教材にしていいですか"],
+    ["新人", "レビューしようとしたら既にマージされてました"],
+    ["CTO", "君がいると障害の方が逃げていくね"],
+    ["デザイナー", "画面の向こうから光が出てる気がします"],
+    ["インフラ担当", "サーバー代、先月の 1/4 になってます。何をしたんですか"],
+    ["QA", "バグ報告を書こうとしたら、もう直ってました"],
+    ["CEO", "今期の目標、今日達成しちゃったみたい"],
+  ];
+  const MISSIONS = [
+    { from: "CTO", msg: "本番のレイテンシが急上昇！p99 が 8 秒を超えてる！", title: "本番障害ホットフィックス", done: "p99 8,000ms → 4ms。ついでにクラウド代も 40% 削減" },
+    { from: "CEO", msg: "投資家デモまであと 20 秒！例の新機能、まだ無いよね…？", title: "デモ直前の新機能実装", done: "デモは大成功。資金調達が決まりました" },
+    { from: "PM", msg: "20 年もののレガシーシステム、今日中に移行できます…？", title: "レガシー全面移行", done: "COBOL 120 万行を移植完了。テスト全通過" },
+    { from: "インフラ担当", msg: "セールのアクセスが想定の 50 倍です！落ちます！", title: "緊急スケールアウト", done: "秒間 200 万リクエストを無停止でさばき切った" },
+    { from: "新人", msg: "すみません、main に force push してしまいました…", title: "リポジトリ救出作戦", done: "reflog から全コミットを復元。新人にも優しく解説した" },
+    { from: "セキュリティ", msg: "依存ライブラリに脆弱性が見つかりました。全サービス対象です", title: "全社一斉パッチ適用", done: "142 サービスへのパッチを 20 秒で展開完了" },
+  ];
+
+  // ---------------------------------------------------------------- core interaction
+  function hit(key = "") {
+    if (!started) { start(); return; }
+    const now = performance.now();
+    combo = now - lastHit < 700 ? combo + 1 : 1;
+    lastHit = now;
+    maxCombo = Math.max(maxCombo, combo);
+    hitTimes.push(now);
+    // Enter とスペースは実物のキーボードでも大きいキーなので、重く低い音にする
+    clack(key === "Enter" || key === " ");
+    updateCombo();
+
+    if (switching) { burst(active && active.caretPoint(), 4); return; }
+    if (active.idle) setActive(panes.find((p) => !p.idle) || active);
+
+    // コンボが伸びるほど 1 打鍵あたりの文字数が増え、「指が追いつかない速さ」を演出する
+    const k = Math.min(3 + Math.floor(combo / 10), 18);
+    const flowing = combo >= 60;
+    let lines = 0;
+    for (const p of [...panes]) {
+      if (p === active) lines += p.type(k);
+      else if (flowing) lines += p.type(Math.ceil(k * 0.8));
+      else if (Math.random() < 0.35) lines += p.type(2);
+    }
+    if (lines) {
+      loc += lines;
+      for (let i = 0; i < lines; i++) lineTimes.push(now);
+    }
+
+    burst(active.caretPoint(), Math.min(3 + combo / 8, 22), 1 + Math.min(combo / 150, 1));
+    if (flowing && panes.length > 1) panes.forEach((p) => p !== active && burst(p.caretPoint(), 3));
+    shake();
+    onMilestones();
+
+    if (mission) {
+      mission.progress += 2.6 + Math.min(combo, 150) * 0.025;
+      if (mission.progress >= 100) finishMission(true);
+    }
+  }
+
+  function shake() {
+    if (reduceMotion || combo < 30) return;
+    const amp = Math.min(1 + combo / 60, 4);
+    editorsEl.style.transform = `translate(${rnd(-amp, amp)}px, ${rnd(-amp, amp)}px)`;
+    clearTimeout(shake.t);
+    shake.t = setTimeout(() => (editorsEl.style.transform = ""), 60);
+  }
+
+  const comboEl = $("#combo"), comboNum = $("#comboNum"), comboTier = $("#comboTier");
+  function updateCombo() {
+    comboEl.classList.toggle("show", combo >= 5);
+    comboNum.textContent = "×" + combo;
+    comboNum.classList.remove("pop");
+    void comboNum.offsetWidth;
+    comboNum.classList.add("pop");
+    let idx = -1;
+    TIERS.forEach((t, i) => { if (combo >= t.at) idx = i; });
+    comboTier.textContent = idx >= 0 ? TIERS[idx].name : "COMBO";
+    if (idx > tierIdx && idx >= 0) {
+      const t = TIERS[idx];
+      term(`[zone] ${t.name} reached at combo ×${t.at}`, "hi");
+      if (t.banner && !switching) {
+        banner(t.banner[0], t.banner[1], "flow");
+        flash(COLORS[2]);
+        fanfare();
+      }
+    }
+    tierIdx = idx;
+    document.body.classList.toggle("flow", combo >= 60);
+    document.body.classList.toggle("legend", combo >= 250);
+  }
+
+  function resetCombo() {
+    if (combo === 0) return;
+    if (combo >= 30) term(`[zone] combo ×${combo} ended — 小休止。コーヒーを一口`, "dim");
+    combo = 0;
+    tierIdx = -1;
+    comboEl.classList.remove("show");
+    document.body.classList.remove("flow", "legend");
+  }
+
+  function onMilestones() {
+    if (loc >= nextPraiseAt) {
+      nextPraiseAt = loc + Math.floor(rnd(60, 110));
+      const [who, text] = pick(PRAISE);
+      chat(who, text);
+      bugs += Math.floor(rnd(1, 4));
+    }
+  }
+
+  // ---------------------------------------------------------------- commands
+  // 収録プロジェクトの言語に合わせて、それらしいツールチェーンのコマンドを出す
+  const TOOLCHAIN = {
+    C: ["make -j16", "make test", "CC"],
+    "C++": ["cmake --build build -j16", "ctest --output-on-failure", "CXX"],
+    "C#": ["dotnet build -c Release", "dotnet test", "csc"],
+    Java: ["./gradlew build", "./gradlew test", "javac"],
+    JavaScript: ["npm run build", "npm test", "bundle"],
+    TypeScript: ["npx tsc -p .", "npx ava", "tsc"],
+    Python: ["python -m build", "pytest -q", "compile"],
+    Go: ["go build ./...", "go test ./...", "compile"],
+    Rust: ["cargo build --release", "cargo test", "Compiling"],
+    Ruby: ["bundle exec rake build", "bundle exec rake test", "load"],
+    PHP: ["composer install -o", "vendor/bin/phpunit", "lint"],
+    Swift: ["swift build -c release", "swift test", "swiftc"],
+    Kotlin: ["./gradlew assemble", "./gradlew allTests", "kotlinc"],
+    Shell: ["shellcheck *.sh", "make test", "check"],
+  };
+  const BEHAVIORS = ["handles empty input", "is thread-safe", "round-trips unicode", "survives 10k concurrent calls", "rejects malformed data",
+    "keeps ordering stable", "frees every allocation", "matches the spec", "recovers after timeout", "streams without buffering"];
+
+  let busy = null;
+  async function job(name, fn) {
+    if (busy) { term(`${busy} が実行中です。終わってからもう一度どうぞ`, "warn"); return; }
+    busy = name;
+    const btn = document.querySelector(`[data-cmd="${name}"]`);
+    btn && btn.setAttribute("aria-busy", "true");
+    try { await fn(); } finally {
+      busy = null;
+      btn && btn.removeAttribute("aria-busy");
+    }
+  }
+  const writtenFiles = () => project.files.filter((f) => !f.license && fileState.has(f.path));
+
+  const build = () => job("build", async () => {
+    const [b, , verb] = TOOLCHAIN[project.lang];
+    cmd(b);
+    const files = writtenFiles();
+    for (const f of files.slice(0, 10)) {
+      term(`  ${verb.padEnd(9)} ${f.path}`, "hi");
+      await sleep(rnd(70, 170));
+    }
+    term(`Build finished in 0.38s · ${files.length} files · warnings: 0 · errors: 0`, "ok");
+    banner("BUILD SUCCESSFUL", `${project.name} · 0.38 秒 · 警告 0 件`, "ok");
+    flash(COLORS[4]);
+    fanfare();
+  });
+
+  const test = () => job("test", async () => {
+    cmd(TOOLCHAIN[project.lang][1]);
+    const names = writtenFiles().map((f) => base(f.path).replace(/\.\w+$/, ""));
+    if (!names.length) names.push(project.id);
+    for (let i = 0; i < 24; i++) {
+      term(`  ✓ ${pick(names)} › ${pick(BEHAVIORS)} (${Math.floor(rnd(1, 40))}ms)`, "ok");
+      await sleep(rnd(25, 70));
+    }
+    term("Tests: 12,847 passed, 0 failed, 0 flaky · Coverage 100.0%", "ok");
+    banner("ALL TESTS PASSED", "12,847 / 12,847 · カバレッジ 100.0%", "ok");
+    flash(COLORS[4]);
+    fanfare();
+  });
+
+  const deploy = () => job("deploy", async () => {
+    const t = new Date();
+    cmd("git push origin main && ship --prod --zero-downtime");
+    term(`  image  sha256:${Math.random().toString(16).slice(2, 14)}… pushed`, "dim");
+    await sleep(300);
+    for (const r of ["ap-northeast-1", "us-east-1", "eu-west-1", "sa-east-1", "ap-southeast-2"]) {
+      term(`  ✓ ${r.padEnd(16)} healthy · p99 ${Math.floor(rnd(2, 6))}ms`, "ok");
+      await sleep(rnd(150, 260));
+    }
+    for (const pct of [1, 10, 50, 100]) {
+      term(`  canary ${String(pct).padStart(3)}% · error rate 0.000%`, "hi");
+      await sleep(200);
+    }
+    term("Deployed to production. Downtime: 0.000s", "ok");
+    banner("SHIPPED TO PRODUCTION", `${t.getDay() === 5 ? "金曜夕方の" : ""}本番デプロイ、障害ゼロ。全リージョン正常。`, "deploy");
+    flash(COLORS[0]);
+    confetti();
+    fanfare();
+    setTimeout(() => chat("CEO", "🎉 リリースおめでとう！ユーザーから感謝のメールが届いています"), 900);
+    setTimeout(() => chat("テックリード", "ロールバック手順、今回も出番なしでしたね"), 2600);
+  });
+
+  function split() {
+    if (switching) return;
+    if (panes.length < 3) {
+      const p = new Pane();
+      if (!assignNext(p)) {
+        p.el.remove();
+        term("[ide] 残りのファイルは他の画面で書いています", "dim");
+        return;
+      }
+      panes.push(p);
+      setActive(p);
+      term(`[ide] split editor → ${panes.length} panes · FLOW STATE 中は全画面を同時に書きます`, "dim");
+    } else {
+      // 閉じる画面で書きかけだったファイルは、未着手に戻して後でもう一度書く
+      while (panes.length > 1) {
+        const p = panes.pop();
+        if (!p.idle) { queue.unshift(p.file); fileState.delete(p.file.path); }
+        p.el.remove();
+      }
+      if (panes[0].idle) assignNext(panes[0]);
+      setActive(panes[0]);
+      renderTree();
+      term("[ide] editor layout reset", "dim");
+    }
+  }
+
+  // ---------------------------------------------------------------- missions
+  let mission = null;
+  const missionEl = $("#mission");
+  function startMission() {
+    if (mission) return;
+    const m = pick(MISSIONS);
+    mission = { m, progress: 0, end: performance.now() + 20000 };
+    $("#mTitle").textContent = m.title;
+    missionEl.hidden = false;
+    chat(m.from, m.msg, true);
+    term(`!! INCIDENT: ${m.title}`, "err");
+    flash(COLORS[0]);
+  }
+  function finishMission(ok) {
+    if (!mission) return;
+    const { m } = mission;
+    mission = null;
+    missionEl.hidden = true;
+    nextMissionAt = performance.now() + rnd(50000, 80000);
+    if (ok) {
+      bugs += Math.floor(rnd(3, 12));
+      term(`✓ RESOLVED: ${m.title} — ${m.done}`, "ok");
+      banner("MISSION COMPLETE", m.done, "ok");
+      flash(COLORS[4]);
+      confetti();
+      fanfare();
+      setTimeout(() => chat(m.from, pick(["助かった…！本当にありがとう", "神か…", "今の、録画しておけばよかった", "あとで焼肉おごります"])), 1000);
+    } else {
+      term(`… TIMEOUT: ${m.title}`, "warn");
+      banner("TIME UP", "…と思ったら、あなたが昨日書いたコードがもう自動で解決していた", "warn");
+      setTimeout(() => chat(m.from, "あれ、もう直ってる…？さすがです"), 1200);
+    }
+  }
+
+  // ---------------------------------------------------------------- credits
+  const creditsEl = $("#credits");
+  $("#creditsLead").textContent =
+    `このアプリは、以下のオープンソースソフトウェアのソースコードを各ライセンスに従って収録しています。各ファイルは記載したタグ時点のものを、先頭から最大 ${DATA.maxLines} 行まで無改変で抜粋しています。著作権は各プロジェクトの作者に帰属します。`;
+  $("#creditsList").innerHTML = PROJECTS.map((p) => `
+    <section class="proj" id="lic-${esc(p.id)}">
+      <h3>${esc(p.name)} <small>${esc(p.lang.toUpperCase())}</small></h3>
+      <div class="meta"><b>${esc(p.license)}</b> · <a href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.url.replace("https://", ""))}</a></div>
+      <div class="meta">収録: ${p.files.filter((f) => !f.license).map((f) => esc(f.path)).join(", ")}</div>
+      ${p.files.filter((f) => f.license).map((f) => `<details><summary>${esc(f.path)} 全文</summary><pre>${esc(f.text)}</pre></details>`).join("")}
+    </section>`).join("");
+  function openCredits(id) {
+    creditsEl.hidden = false;
+    if (id) {
+      const sec = document.getElementById("lic-" + id);
+      if (sec) {
+        sec.querySelectorAll("details").forEach((d) => (d.open = true));
+        sec.scrollIntoView({ block: "start" });
+      }
+    }
+    $("#creditsClose").focus();
+  }
+  function closeCredits() {
+    creditsEl.hidden = true;
+    focusSink();
+  }
+  $("#creditsClose").addEventListener("click", closeCredits);
+  creditsEl.addEventListener("pointerdown", (e) => { if (e.target === creditsEl) closeCredits(); });
+  $("#introCredits").addEventListener("pointerdown", (e) => e.stopPropagation());
+  $("#introCredits").addEventListener("click", () => openCredits());
+
+  // ---------------------------------------------------------------- command routing
+  const COMMANDS = { build, test, deploy, split, mission: startMission, sound: toggleSound, credits: () => openCredits(project.id) };
+  const FKEYS = { F1: "build", F2: "test", F3: "deploy", F4: "split", F5: "mission", F6: "sound", F7: "credits" };
+  const ALTKEYS = { Digit1: "build", Digit2: "test", Digit3: "deploy", Digit4: "split", Digit5: "mission", Digit6: "sound", Digit7: "credits" };
+  function run(name) {
+    if (name === "credits") { COMMANDS.credits(); return; }
+    if (!started) start();
+    COMMANDS[name]();
+  }
+
+  // ---------------------------------------------------------------- intro / project picker
+  const picker = $("#picker");
+  let pickIdx = 0;
+  picker.innerHTML = PROJECTS.map((p, i) => `<button type="button" data-i="${i}" aria-pressed="false"><b>${esc(p.lang)}</b><span>${esc(p.name)}</span></button>`).join("");
+  function preview(i) {
+    pickIdx = (i + PROJECTS.length) % PROJECTS.length;
+    picker.querySelectorAll("button").forEach((b, j) => b.setAttribute("aria-pressed", String(j === pickIdx)));
+    loadProject(PROJECTS[pickIdx], { quiet: true });
+    // 開始前から「作業中の IDE」に見えるよう、選んだプロジェクトのコードを少し書いた状態にしておく
+    active.type(700);
+  }
+  picker.addEventListener("pointerdown", (e) => e.stopPropagation());
+  picker.addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-i]");
+    if (!b) return;
+    if (+b.dataset.i !== pickIdx) preview(+b.dataset.i);
+    start();
+  });
+
+  $("#projSel").innerHTML = PROJECTS.map((p) => `<option value="${esc(p.id)}">${esc(p.lang)} · ${esc(p.name)}</option>`).join("");
+  $("#projSel").addEventListener("change", (e) => {
+    const p = PROJECTS.find((q) => q.id === e.target.value);
+    if (!started) { preview(PROJECTS.indexOf(p)); }
+    else {
+      while (panes.length > 1) panes.pop().el.remove();
+      loadProject(p);
+    }
+    focusSink();
+  });
+
+  // ---------------------------------------------------------------- input wiring
+  const sink = $("#sink");
+  const focusSink = () => { try { sink.focus({ preventScroll: true }); } catch { /* フォーカス不可な環境でも表示は動かす */ } };
+
+  addEventListener("keydown", (e) => {
+    // ブラウザ標準のショートカット（再読み込み・タブ切替など）は奪わない
+    if (e.metaKey || e.ctrlKey) return;
+    if (!creditsEl.hidden) { if (e.key === "Escape") closeCredits(); return; }
+    if (e.target === $("#projSel")) return;
+    const name = FKEYS[e.key] || (e.altKey && ALTKEYS[e.code]);
+    if (name) { e.preventDefault(); run(name); return; }
+    if (!started && (e.key === "ArrowLeft" || e.key === "ArrowRight" || e.key === "ArrowUp" || e.key === "ArrowDown")) {
+      e.preventDefault();
+      preview(pickIdx + (e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 1));
+      return;
+    }
+    // IME 変換中やモバイルの仮想キーボードは keydown が当てにならないので input イベント側で拾う
+    if (e.isComposing || e.keyCode === 229 || e.key === "Unidentified" || e.key === "Process") return;
+    if (["Shift", "Alt", "Control", "Meta", "CapsLock", "Fn", "Escape"].includes(e.key)) return;
+    e.preventDefault();
+    hit(e.key);
+  });
+  sink.addEventListener("input", (e) => {
+    if (!creditsEl.hidden) return;
+    hit();
+    if (!e.isComposing) sink.value = "";
+  });
+  sink.addEventListener("compositionend", () => { sink.value = ""; });
+
+  editorsEl.addEventListener("pointerdown", () => { hit(); focusSink(); });
+  document.querySelector(".bar").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-cmd]");
+    if (b) { run(b.dataset.cmd); if (b.dataset.cmd !== "credits") focusSink(); }
+  });
+  $("#intro").addEventListener("pointerdown", (e) => { e.preventDefault(); start(); });
+
+  function start() {
+    if (started) return;
+    started = true;
+    $("#intro").hidden = true;
+    focusSink();
+    nextMissionAt = performance.now() + 45000;
+    // プレビュー中に書けたファイルは自分の成果ではないので数えない
+    filesDone = 0;
+    tout.textContent = "";
+    cmd(`git init ${project.id} && cd ${project.id}`);
+    term(`Initialized empty Git repository · ${project.name} (${project.lang}) · ${project.license}`, "dim");
+    term("[ide] flow mode engaged. distractions muted. Slack set to “集中モード”.", "hi");
+  }
+
+  // ---------------------------------------------------------------- telemetry loop
+  const coresEl = $("#cores");
+  const cores = Array.from({ length: 16 }, () => coresEl.appendChild(document.createElement("i")));
+  const spark = $("#spark"), sctx = spark.getContext("2d");
+  const history = new Array(60).fill(0);
+  const fmt = (n) => n.toLocaleString("ja-JP");
+
+  function drawSpark() {
+    const dpr = window.devicePixelRatio || 1;
+    const w = spark.clientWidth, h = spark.clientHeight;
+    if (!w) return;
+    if (spark.width !== w * dpr) { spark.width = w * dpr; spark.height = h * dpr; }
+    sctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    sctx.clearRect(0, 0, w, h);
+    const max = Math.max(60, ...history);
+    sctx.strokeStyle = css.getPropertyValue("--line");
+    sctx.lineWidth = 1;
+    for (let g = 1; g < 3; g++) { sctx.beginPath(); sctx.moveTo(0, (h * g) / 3); sctx.lineTo(w, (h * g) / 3); sctx.stroke(); }
+    const pts = history.map((v, i) => [(i / (history.length - 1)) * w, h - 2 - (v / max) * (h - 6)]);
+    sctx.beginPath();
+    pts.forEach(([x, y], i) => (i ? sctx.lineTo(x, y) : sctx.moveTo(x, y)));
+    sctx.lineTo(w, h); sctx.lineTo(0, h); sctx.closePath();
+    sctx.fillStyle = "rgba(92, 207, 230, .14)";
+    sctx.fill();
+    sctx.beginPath();
+    pts.forEach(([x, y], i) => (i ? sctx.lineTo(x, y) : sctx.moveTo(x, y)));
+    sctx.strokeStyle = COLORS[1];
+    sctx.lineWidth = 1.5;
+    sctx.stroke();
+    const [ex, ey] = pts[pts.length - 1];
+    sctx.fillStyle = COLORS[0];
+    sctx.beginPath(); sctx.arc(ex - 2, ey, 3, 0, Math.PI * 2); sctx.fill();
+  }
+
+  let lastSlow = 0, lastSample = 0;
+  function frame(now) {
+    drawParticles();
+    if (combo && now - lastHit > 1400) resetCombo();
+
+    if (mission) {
+      const left = Math.max(0, mission.end - now);
+      $("#mTime").textContent = (left / 1000).toFixed(1) + "s";
+      $("#mProg").style.width = Math.min(100, mission.progress) + "%";
+      if (left <= 0) finishMission(false);
+    } else if (started && now > nextMissionAt && now - lastHit < 4000 && !busy && !switching) {
+      startMission();
+    }
+
+    if (now - lastSlow > 120) {
+      lastSlow = now;
+      while (hitTimes.length && now - hitTimes[0] > 1000) hitTimes.shift();
+      while (lineTimes.length && now - lineTimes[0] > 10000) lineTimes.shift();
+      const intensity = Math.min(hitTimes.length / 12, 1);
+      cores.forEach((c) => (c.style.height = Math.max(6, Math.min(100, (0.08 + intensity * rnd(0.5, 1.05)) * 100)) + "%"));
+      $("#flowMeter").style.width = Math.min(100, (combo / 120) * 100) + "%";
+      const rate = lineTimes.length * 6;
+      $("#sLoc").textContent = fmt(loc);
+      $("#sRate").textContent = fmt(rate);
+      $("#sFiles").textContent = fmt(filesDone);
+      $("#sProjects").textContent = fmt(projectsDone);
+      $("#sCombo").textContent = fmt(maxCombo);
+      $("#sBugs").textContent = fmt(bugs);
+      $("#sCoffee").textContent = 1 + Math.floor(loc / 150) + " 杯";
+      $("#sValue").textContent = "¥" + fmt(800 + loc * 3) + "万";
+      const r = RANKS.filter(([at]) => loc >= at).pop();
+      $("#rank").innerHTML = `${r[1]}<small>${r[2]}</small>`;
+      $("#clock").textContent = new Date().toTimeString().slice(0, 8);
+      if (active && active.file) {
+        $("#pos").textContent = `Ln ${active.n}, Col ${(active.lineText || "").length + 1} · ${project.lang} · ${project.name} ${project.url.split("/").pop()} · ${project.license}`;
+      }
+      if (now - lastSample > 500) { lastSample = now; history.push(rate); history.shift(); drawSpark(); }
+    }
+    requestAnimationFrame(frame);
+  }
+
+  // ---------------------------------------------------------------- boot
+  preview(Math.floor(Math.random() * PROJECTS.length));
+  term("flowstate workspace — 14 languages, 14 open source projects", "dim");
+  cmd("git pull --rebase");
+  term("Already up to date.", "dim");
+  requestAnimationFrame(frame);
+})();
+</script>
