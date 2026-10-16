@@ -469,11 +469,56 @@ body.flow .cores i { background: var(--violet); }
     // @moduledoc などのモジュール属性は anno、:atom は sym で色付けする
     Elixir: { line: ["#"], triple: true, anno: true, sym: true, kw: words("after alias and case catch cond def defdelegate defexception defguard defimpl defmacro defmacrop defmodule defoverridable defp defprotocol defstruct do else end false fn for if import in nil not or quote raise receive require rescue reraise throw true try unless unquote use when with") },
     // $#array や @$ref のように記号が続く変数があり、ここで拾わないと # がコメント扱いされてしまう
-    Perl: { line: ["#"], pod: true, vars: /^\$#(?=[{$\w])|^[$@%]\$*(?:\^\w|[A-Za-z_]\w*(?:::\w+)*|\d+|[!@\/\\,;.&+_0])/,
-      kw: words("my our local sub package use no require return if elsif else unless while until for foreach last next redo do eval die warn print say defined undef ref bless shift push pop unshift splice keys values each exists delete scalar wantarray and or not eq ne lt gt le ge cmp qw qq qr BEGIN END __PACKAGE__ __END__ has") },
+    Perl: { line: ["#"], pod: true, quoteOps: true, vars: /^\$#(?=[{$\w])|^[$@%]\$*(?:\^\w|[A-Za-z_]\w*(?:::\w+)*|\d+|[!@\/\\,;.&+_0])/,
+      kw: words("my our local sub package use no require return if elsif else unless while until for foreach last next redo do eval die warn print say defined undef ref bless shift push pop unshift splice keys values each exists delete scalar wantarray and or not eq ne lt gt le ge cmp qw qq qr split join grep map sort reverse length substr sprintf lc uc BEGIN END __PACKAGE__ __END__ has") },
     // Lisp 系は識別子に - ? ! * / などを含み、( の直後が関数呼び出しになるので専用の扱い（lisp）をする
     Scheme: { block: ["#|", "|#"], line: [";"], lisp: true, kw: words("define define-syntax define-record-type define-who lambda case-lambda let let* letrec letrec* let-values let*-values named-lambda rec if cond case else when unless and or not begin do set! quote quasiquote unquote unquote-splicing syntax-rules syntax-case with-syntax syntax quasisyntax identifier-syntax module import export library include let-syntax letrec-syntax fluid-let parameterize guard delay force values call-with-values dynamic-wind call/cc") },
   };
+
+  // Perl のクォート風演算子（m// s/// qr{} qw() など）と、正規表現として書かれた /.../ を扱う。
+  // 区切り文字は任意で、括弧系は入れ子になり、s と tr は 2 部構成なので専用に読む
+  const PAIRS = { "(": ")", "[": "]", "{": "}", "<": ">" };
+  // from 以降で、エスケープされていない close の直後の位置を返す（見つからなければ -1）
+  function scanDelim(line, from, open, close) {
+    let depth = 0;
+    for (let j = from; j < line.length; j++) {
+      const ch = line[j];
+      if (ch === "\\") { j++; continue; }
+      if (ch === close && open !== close) { if (depth-- === 0) return j + 1; continue; }
+      if (ch === close) return j + 1;
+      if (ch === open) depth++;
+    }
+    return -1;
+  }
+  // 直前のトークンが「値」なら / は割り算、演算子や行頭なら正規表現の開始とみなす
+  const REGEX_AFTER = /(?:^|[=!]~|[(,=!{;&|?:]|\b(?:and|or|not|if|unless|return|split|grep|map|when|while|until))\s*$/;
+  function quoteLike(line, i) {
+    const rest = line.slice(i), before = line.slice(0, i), prev = before.slice(-1);
+    let op = "", m;
+    if (line[i] === "/") {
+      // $x // 1 の defined-or は値の後に来るので REGEX_AFTER に当たらない
+      if (!REGEX_AFTER.test(before)) return null;
+    } else {
+      // $h{s} や ->y、-s $file（ファイルテスト）、foo::q のような識別子の一部は演算子ではない
+      if (/[\w$@%&*>:-]/.test(prev) || !(m = /^(qr|qw|qq|q|m|s|tr|y)(\s*)([^\w\s])/.exec(rest))) return null;
+      const [, name, sp, d] = m;
+      if (/[=,;)\]}>]/.test(d) || (sp && !PAIRS[d]) || (d === "=" && rest[m[0].length] === ">")) return null;
+      op = name + sp;
+    }
+    const open = rest[op.length], close = PAIRS[open] || open, two = /^(?:s|tr|y)\b/.test(op);
+    let j = scanDelim(line, i + op.length + 1, open, close);
+    if (j < 0) return { end: line.length, st: { end: close, cls: "s", esc: true, flags: true } };
+    if (two) {
+      // s{...}{...} は 2 つ目の括弧を新たに開く。s/../../ は同じ区切り文字の続き
+      let k = j;
+      if (PAIRS[open]) { while (/\s/.test(line[k] || "")) k++; const o2 = line[k]; j = o2 ? scanDelim(line, k + 1, o2, PAIRS[o2] || o2) : -1; }
+      else j = scanDelim(line, j, open, close);
+      if (j < 0) return { end: line.length, st: null };
+    }
+    const flags = /^[a-z]*/.exec(line.slice(j))[0];
+    // 修飾子（/gcsi など）を持つのは正規表現系だけで、q qq qw の直後の英字は別のトークン
+    return { end: j + (/^q[qw]?\b/.test(op) ? 0 : flags.length), st: null };
+  }
 
   // 1 行ぶんを HTML 化する。st は前の行から続く複数行コメント／文字列の状態
   function hl(line, lang, st) {
@@ -481,9 +526,11 @@ body.flow .cores i { background: var(--violet); }
     let out = "", i = 0;
     const put = (cls, s) => { out += cls ? `<span class="${cls}">${esc(s)}</span>` : esc(s); i += s.length; };
     if (st) {
-      const j = line.indexOf(st.end);
+      // 正規表現の続きは \/ のようなエスケープを終端と取り違えないよう 1 文字ずつ読む
+      const e = st.esc ? scanDelim(line, 0, st.end, st.end) : line.indexOf(st.end);
+      const j = st.esc ? e : e < 0 ? -1 : e + st.end.length;
       if (j < 0) { put(st.cls, line); return [out, st]; }
-      put(st.cls, line.slice(0, j + st.end.length));
+      put(st.cls, line.slice(0, j + (st.flags ? /^[a-z]*/.exec(line.slice(j))[0].length : 0)));
       st = null;
     }
     // POD は =head1 などで始まり =cut で終わる行単位のドキュメント
@@ -509,6 +556,11 @@ body.flow .cores i { background: var(--violet); }
       if (L.attr && (m = /^#!?\[[^\]]*\]?/.exec(rest))) { put("a", m[0]); continue; }
       if (L.anno && (m = /^@[A-Za-z_][\w.]*/.exec(rest))) { put("a", m[0]); continue; }
       if (L.vars && (m = L.vars.exec(rest))) { put("v", m[0]); continue; }
+      if (L.quoteOps && (c === "/" || /[mqsty]/.test(c)) && (m = quoteLike(line, i))) {
+        put("s", line.slice(i, m.end));
+        if (m.st) return [out, m.st];
+        continue;
+      }
       if (L.sym && (m = /^:[A-Za-z_]\w*[?!]?/.exec(rest)) && !/[\w:]/.test(prev)) { put("n", m[0]); continue; }
       if (L.lisp) {
         // #t / #\a / #x1F などのリテラル。' ` , はクォート記号であって文字列の開始ではない
