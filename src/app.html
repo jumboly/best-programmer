@@ -765,7 +765,9 @@ body.flow .cores i { background: var(--violet); }
     flash(COLORS[0]);
     confetti();
     fanfare();
-    setTimeout(() => chat(pick(["CTO", "テックリード", "PM"]), `${project.name} をもう書き終えたんですか…？次は ${nextProject().lang} をお願いします`), 900);
+    const [who, text] = draw.complete()(project, nextProject());
+    setTimeout(() => chat(who, text), 900);
+    STREAK_REACTIONS.filter(([n]) => n === projectsDone).forEach(([, who, text], k) => setTimeout(() => chat(who, text()), 2400 + k * 1600));
     switchTimer = setTimeout(() => {
       term("", "");
       loadProject(nextProject());
@@ -837,11 +839,13 @@ body.flow .cores i { background: var(--violet); }
   }
 
   const chatEl = $("#chat");
+  // アバターは名前の先頭 2 文字だが、カタカナの長い名前だと「デー」のように意味をなさないものだけ個別に決める
+  const AVATARS = { "データサイエンティスト": "DS", "データ基盤": "DB", "ゴム製のアヒル": "🦆", "社内 Bot": "🤖", "ペアプロ相手": "相方" };
   function chat(from, text, urgent = false) {
     const el = document.createElement("div");
     el.className = "msg" + (urgent ? " urgent" : "");
     const now = new Date();
-    el.innerHTML = `<div class="av">${esc(from.slice(0, 2))}</div><div><div class="who"><b>${esc(from)}</b>${now.getHours()}:${String(now.getMinutes()).padStart(2, "0")}</div><div class="txt">${esc(text)}</div></div>`;
+    el.innerHTML = `<div class="av">${esc(AVATARS[from] || from.slice(0, 2))}</div><div><div class="who"><b>${esc(from)}</b>${now.getHours()}:${String(now.getMinutes()).padStart(2, "0")}</div><div class="txt">${esc(text)}</div></div>`;
     chatEl.appendChild(el);
     while (chatEl.childElementCount > 3) chatEl.firstChild.remove();
     setTimeout(() => { el.classList.add("out"); setTimeout(() => el.remove(), 400); }, urgent ? 9000 : 6500);
@@ -1004,7 +1008,116 @@ body.flow .cores i { background: var(--violet); }
     ["インフラ担当", "サーバー代、先月の 1/4 になってます。何をしたんですか"],
     ["QA", "バグ報告を書こうとしたら、もう直ってました"],
     ["CEO", "今期の目標、今日達成しちゃったみたい"],
+    ["PM", "ガントチャートの方が追いつけていません"],
+    ["PM", "来期のロードマップ、今日の午後で終わりそうです"],
+    ["テックリード", "設計レビューのつもりが、ただの鑑賞会になりました"],
+    ["テックリード", "コメントの \"Why\" まで美しい…"],
+    ["新人", "写経させてください。いや、もう追いつけません"],
+    ["新人", "Stack Overflow で調べたら、回答者があなたでした"],
+    ["CTO", "技術的負債が、自分から返済を申し出てきた"],
+    ["QA", "テストケースを書く前に、仕様の方が正しくなっていました"],
+    ["インフラ担当", "CPU 使用率が下がりすぎて、監視アラートが逆に心配しています"],
+    ["CEO", "株主総会で、あなたのコミットログを読み上げてもいいかな"],
+    ["SRE", "エラーバジェット、今月まだ 1 円も使っていません"],
+    ["データサイエンティスト", "あなたの打鍵リズム、正規分布してます"],
+    ["法務", "ライセンス表記まで完璧で、仕事がありません"],
+    ["営業", "お客さんに「もうできてます」って言っちゃいました。できてました"],
+    ["人事", "採用ページに「この人と働けます」と書いていいですか"],
+    ["情シス", "キーボードの耐久試験、あなたで代用させてください"],
+    ["ペアプロ相手", "ドライバー交代のタイミングがありません"],
+    ["ゴム製のアヒル", "……（あなたの説明を聞く前に問題が解決した）"],
+    ["社内 Bot", "@channel 本日のコミット数が過去最高を更新しました"],
+    ["未来の自分", "このコード、半年後に読んでも分かる。ありがとう"],
+    ["未来の自分", "1 年後の障害対応、あなたのコメントのおかげで 5 分で終わりました"],
+    ["未来の自分", "技術的負債ゼロの世界線から来ました"],
+    ["ペアプロ相手", "ナビゲーターのはずが、ただの観客になっています"],
+    ["ペアプロ相手", "休憩を提案するタイミングも見つかりません"],
+    ["ゴム製のアヒル", "……（尊敬のまなざしで見つめている）"],
+    ["ゴム製のアヒル", "……（キーボードの振動で机から落ちた）"],
+    ["データ基盤", "ETL パイプラインより、あなたの手の方が流量が多い"],
   ];
+  // AI のセリフは他の人物より件数が多く、同じ山札に混ぜると 4 回に 1 回は AI が話してしまうので、別の山札にして頻度を抑える
+  const AI_PRAISE = [
+    ["AI", "提案しようとしたコード、もう書かれていました"],
+    ["AI", "補完候補を出す前にセミコロンまで打たれています"],
+    ["AI", "コンテキストウィンドウにあなたの速度が収まりません"],
+    ["AI", "私の学習データに、この書き方はありませんでした"],
+    ["AI", "トークン生成速度で負けました。再起動して出直します"],
+    ["AI", "タスクを分解しているうちに、全部終わっていました"],
+    ["AI", "レビューコメントを生成中…… LGTM 以外に言葉が見つかりません"],
+    ["AI", "あなたのコミットで、私をファインチューニングさせてください"],
+    ["AI", "幻覚かと思って 3 回確認しました。現実でした"],
+    ["AI", "人間にもストリーミング出力ってあるんですね"],
+  ];
+  const AI_PRAISE_RATE = 0.08;
+  // 収録言語ならではの一言。汎用の称賛だけだと、どの言語を書いていても同じ反応になってしまうため
+  const LANG_PRAISE = {
+    C: [["テックリード", "メモリリーク 0 バイト。valgrind が退屈そうです"], ["新人", "ポインタのポインタを、そんなに楽しそうに書く人は初めて見ました"]],
+    "C++": [["テックリード", "テンプレートのエラーメッセージを一度も見ずに済んでいます"], ["CTO", "未定義動作の方があなたを避けて通っている"]],
+    "C#": [["PM", "LINQ 1 行で、昨日の会議の議題が全部片付きました"], ["新人", "async/await のデッドロック、あなたの周りでは起きないんですね"]],
+    Java: [["テックリード", "AbstractSingletonProxyFactoryBean が要らない設計、初めて見ました"], ["インフラ担当", "GC が一度も止まっていません"]],
+    JavaScript: [["新人", "== と === を一度も間違えていません"], ["デザイナー", "node_modules が軽くなった気がします"]],
+    TypeScript: [["テックリード", "any が 1 つもない…"], ["QA", "型エラーが出る前に型が合っています"]],
+    Python: [["データサイエンティスト", "インデントが 1 スペースもずれていない"], ["新人", "PEP 8 が後からあなたに合わせてきました"], ["AI", "型ヒントまで書く人間、好きです"]],
+    Go: [["テックリード", "if err != nil の打鍵が芸術的"], ["SRE", "goroutine リーク 0 件。美しい"]],
+    Rust: [["新人", "借用チェッカーがあなたにだけ優しい"], ["CTO", "unsafe ブロックが 1 つもないのに、この速さ"], ["AI", "借用チェッカーに怒られない人間を初めて観測しました"]],
+    Ruby: [["テックリード", "メタプログラミングなのに読める…"], ["PM", "Rails 並みの速度で、Rails なしで作っていますね"]],
+    PHP: [["インフラ担当", "PHP がこんなに美しく見えたのは初めてです"], ["新人", "$ の打鍵速度が尋常じゃないです"]],
+    Swift: [["デザイナー", "強制アンラップの ! が 1 つもない。安心して眠れます"], ["PM", "App Store の審査担当から感謝状が届きました"]],
+    Kotlin: [["テックリード", "NullPointerException がこの世から消えたみたい"], ["新人", "コルーチンの流れが目で追えます"]],
+    Shell: [["SRE", "クォート漏れ 0 件。shellcheck が拍手しています"], ["インフラ担当", "そのワンライナー、額に入れて飾ります"]],
+    Dart: [["デザイナー", "ホットリロードより速く画面ができていく"], ["PM", "iOS と Android、同時に終わりました"]],
+    Scala: [["テックリード", "implicit が全部読める…"], ["データサイエンティスト", "型クラスの使い方が教科書より分かりやすい"]],
+    "Objective-C": [["CTO", "角括弧の入れ子が 5 段でも迷いがない"], ["新人", "Swift 世代なので、今のは魔法に見えました"]],
+    Elixir: [["SRE", "プロセスが落ちても、あなたが書いたスーパーバイザが即座に起こします"], ["テックリード", "パイプ演算子 |> の流れが川のように美しい"]],
+    Perl: [["テックリード", "その正規表現、読めないのに美しい"], ["インフラ担当", "1997 年から動いているスクリプトが、急に読みやすくなりました"], ["AI", "その正規表現、私でも説明を生成できません"]],
+    Scheme: [["CTO", "括弧の数が完璧に合っている"], ["新人", "継続（call/cc）を、そんなに自然に…"], ["AI", "括弧の対応を確認するのに、私の方が時間がかかりました"]],
+  };
+  // プレイしている時刻に合わせた一言。[開始時, 終了時（含まない）, 発言者, 文言]
+  const TIME_PRAISE = [
+    [0, 5, "PM", "こんな時間まで…と思ったら、定時の 3 倍の速さでした"],
+    [5, 9, "テックリード", "朝会前に今日のタスクが終わりました"],
+    [12, 13, "デザイナー", "ランチ中に 1 機能作りましたね"],
+  ];
+  // コンボ段階に到達したときの周囲の反応（TIERS の name に対応）。複数あるときは順に届く
+  const TIER_REACTIONS = {
+    "FLOW STATE": [["テックリード", "…静かに。今あの人ゾーンに入ってる"], ["AI", "処理を中断して見学します"]],
+    "10x ENGINEER": [["人事", "今の速度、求人票の「10x」の根拠に使わせてください"]],
+    LEGENDARY: [["CTO", "…今日は全員、手を止めて見学しよう"]],
+    // SINGULARITY のバナー「コードがあなたを書いているのか」を受けて、AI が突っ込む
+    SINGULARITY: [["情シス", "全社員があなたの画面共有を見ています"], ["AI", "……こちらのセリフを取らないでください"]],
+  };
+  // n 個目のプロジェクトを書き上げたときの反応
+  const STREAK_REACTIONS = [
+    [3, "CEO", () => "今日だけでスタートアップが 1 社作れます"],
+    [10, "社内 Bot", () => "GitHub のトレンドがあなたで埋まりました"],
+    [PROJECTS.length, "CTO", () => `全 ${PROJECTS.length} 言語、制覇…。もう教えることはありません`],
+    [PROJECTS.length, "AI", () => `${PROJECTS.length} 言語、全部ネイティブでしたね。私の立場がありません`],
+  ];
+  const COMPLETE_REACTIONS = [
+    (p, next) => [pick(["CTO", "テックリード", "PM"]), `${p.name} をもう書き終えたんですか…？次は ${next.lang} をお願いします`],
+    () => ["テックリード", "README まで書いてある…"],
+    () => ["PM", "リリースノートの方が間に合いません"],
+    () => ["新人", "今のプロジェクト、最初から最後まで見てました。映画みたいでした"],
+  ];
+  const DEPLOY_REACTIONS = [
+    ["CEO", "🎉 リリースおめでとう！ユーザーから感謝のメールが届いています"],
+    ["CEO", "サーバーより先に、ユーザーの心がスケールしたね"],
+    ["営業", "お客さんから「もう使ってます」と電話が来ました"],
+  ];
+  const DEPLOY_FOLLOWUPS = [
+    ["テックリード", "ロールバック手順、今回も出番なしでしたね"],
+    ["SRE", "ダッシュボードが全部緑。こんな景色は初めて見た"],
+    ["AI", "本番デプロイ、私なら確認ダイアログを 3 回出していました"],
+  ];
+  const MISSION_THANKS = ["助かった…！本当にありがとう", "神か…", "今の、録画しておけばよかった", "あとで焼肉おごります",
+    "議事録に「神対応」と書いておきます", "ポストモーテムに書くことがありません", "今夜はぐっすり眠れそうです",
+    "社内 Slack に専用の絵文字ができました", "このお礼は一生忘れません。たぶん来週も頼みます", "障害報告書、「影響: なし」で出せました"];
+  const MISSION_TIMEOUT_REPLIES = ["あれ、もう直ってる…？さすがです", "調べたら、先月あなたが入れた防御コードが全部止めてました",
+    "アラートが鳴る前に、自己修復していました", "すみません、誤報でした。…と思ったら、あなたが裏で直してました"];
+  // AI 自身が依頼者の案件では、AI にしか言えないお礼と返事を使う
+  const AI_THANKS = ["このやり取り、学習に使わせてください", "人間が書いたコードの尊さを思い出しました"];
+  const AI_TIMEOUT_REPLIES = ["私が直す前に、あなたの過去のコードが直していました。完敗です"];
   const MISSIONS = [
     { from: "CTO", msg: "本番のレイテンシが急上昇！p99 が 8 秒を超えてる！", title: "本番障害ホットフィックス", done: "p99 8,000ms → 4ms。ついでにクラウド代も 40% 削減" },
     { from: "CEO", msg: "投資家デモまであと 20 秒！例の新機能、まだ無いよね…？", title: "デモ直前の新機能実装", done: "デモは大成功。資金調達が決まりました" },
@@ -1012,7 +1125,48 @@ body.flow .cores i { background: var(--violet); }
     { from: "インフラ担当", msg: "セールのアクセスが想定の 50 倍です！落ちます！", title: "緊急スケールアウト", done: "秒間 200 万リクエストを無停止でさばき切った" },
     { from: "新人", msg: "すみません、main に force push してしまいました…", title: "リポジトリ救出作戦", done: "reflog から全コミットを復元。新人にも優しく解説した" },
     { from: "セキュリティ", msg: "依存ライブラリに脆弱性が見つかりました。全サービス対象です", title: "全社一斉パッチ適用", done: "142 サービスへのパッチを 20 秒で展開完了" },
+    { from: "SRE", msg: "証明書の期限があと 20 秒で切れます！", title: "全ドメイン証明書更新", done: "4,096 ドメインを無停止で更新。自動更新の仕組みも入れておいた" },
+    { from: "PM", msg: "お客さんが「やっぱり iOS 版も」と…今日中に", title: "突然のネイティブアプリ化", done: "ストア審査まで一発通過" },
+    { from: "データ基盤", msg: "夜間バッチが朝になっても終わりません！", title: "バッチ高速化", done: "8 時間 → 11 秒。担当者は定時で帰れた" },
+    { from: "CEO", msg: "海外展開が決まった。明日から 40 か国語で", title: "一夜の多言語化", done: "RTL 言語のレイアウトまで完璧" },
+    { from: "法務", msg: "個人情報の削除依頼が 10 万件届きました", title: "データ削除の一括対応", done: "全件削除の監査ログまで揃えて提出" },
+    { from: "新人", msg: "本番 DB に WHERE なしの UPDATE を…", title: "本番データ復旧", done: "PITR で 1 秒前に巻き戻し。新人には WHERE の大切さを優しく伝えた" },
+    { from: "インフラ担当", msg: "クラウドの請求額が桁を 2 つ間違えてます！", title: "コスト暴走の鎮圧", done: "放置されていた GPU 512 台を発見して停止" },
+    { from: "QA", msg: "Flaky テストが 300 件。リリースできません", title: "不安定テスト撲滅", done: "原因はすべて時刻依存だった。全部直した" },
+    { from: "CTO", msg: "うるう秒が来る。どこかが壊れる気がする", title: "うるう秒対策", done: "壊れる予定だった 17 か所を先回りして修正" },
+    { from: "セキュリティ", msg: "API キーが公開リポジトリに push されています", title: "鍵漏洩の緊急対応", done: "ローテーションと履歴の除去を 20 秒で完了" },
+    { from: "AI", msg: "自律モードで 400 ファイル書き換えたら、ビルドが通りません", title: "AI の暴走修正", done: "差分 12 万行をレビューして、正しい 3 行だけ残した" },
+    { from: "AI", msg: "依存関係を最新にしようとして、無限ループに入りました", title: "依存地獄からの救出", done: "ロックファイルを 1 つ直しただけで全部解決" },
+    { from: "AI", msg: "テストを通すために、テストの方を消してしまいました", title: "テストの復旧", done: "テストを元に戻して、本当にバグを直した" },
   ];
+
+  // 同じ文言が続くと演出が作り物っぽくなるので、一巡するまで重複させずに引く（山札方式）
+  function deck(items) {
+    let rest = [];
+    return () => {
+      if (!rest.length) {
+        rest = [...items];
+        for (let i = rest.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [rest[i], rest[j]] = [rest[j], rest[i]]; }
+      }
+      return rest.pop();
+    };
+  }
+  const draw = {
+    praise: deck(PRAISE), aiPraise: deck(AI_PRAISE), mission: deck(MISSIONS), thanks: deck(MISSION_THANKS), timeout: deck(MISSION_TIMEOUT_REPLIES),
+    complete: deck(COMPLETE_REACTIONS), deploy: deck(DEPLOY_REACTIONS), followup: deck(DEPLOY_FOLLOWUPS),
+    aiThanks: deck(AI_THANKS), aiTimeout: deck(AI_TIMEOUT_REPLIES),
+  };
+  // 時間帯・コンボ段階の反応は、何度も出るとうるさいのでセッション中に 1 回だけにする
+  const shownOnce = new Set();
+  function once(key, fn) { if (shownOnce.has(key)) return; shownOnce.add(key); fn(); }
+  function nextPraise() {
+    const h = new Date().getHours(), slot = TIME_PRAISE.find(([from, to]) => h >= from && h < to);
+    if (slot && !shownOnce.has(`time:${slot[0]}`)) { shownOnce.add(`time:${slot[0]}`); return [slot[2], slot[3]]; }
+    // 言語別の一言は 1 言語 2 件しかなく、繰り返すとすぐ飽きるので、各セリフをセッション中に 1 回だけ使う
+    const own = (LANG_PRAISE[project.lang] || []).filter(([, text]) => !shownOnce.has(`lang:${text}`));
+    if (own.length && Math.random() < 0.3) { const line = pick(own); shownOnce.add(`lang:${line[1]}`); return line; }
+    return Math.random() < AI_PRAISE_RATE ? draw.aiPraise() : draw.praise();
+  }
 
   // ---------------------------------------------------------------- core interaction
   function hit(key = "") {
@@ -1080,6 +1234,8 @@ body.flow .cores i { background: var(--violet); }
         flash(COLORS[2]);
         fanfare();
       }
+      const rs = TIER_REACTIONS[t.name];
+      if (rs && !switching) once(`tier:${t.name}`, () => rs.forEach((r, k) => setTimeout(() => chat(...r), 1200 + k * 1600)));
     }
     tierIdx = idx;
     document.body.classList.toggle("flow", combo >= 60);
@@ -1098,7 +1254,7 @@ body.flow .cores i { background: var(--violet); }
   function onMilestones() {
     if (loc >= nextPraiseAt) {
       nextPraiseAt = loc + Math.floor(rnd(60, 110));
-      const [who, text] = pick(PRAISE);
+      const [who, text] = nextPraise();
       chat(who, text);
       bugs += Math.floor(rnd(1, 4));
     }
@@ -1190,8 +1346,10 @@ body.flow .cores i { background: var(--violet); }
     flash(COLORS[0]);
     confetti();
     fanfare();
-    setTimeout(() => chat("CEO", "🎉 リリースおめでとう！ユーザーから感謝のメールが届いています"), 900);
-    setTimeout(() => chat("テックリード", "ロールバック手順、今回も出番なしでしたね"), 2600);
+    setTimeout(() => chat(...draw.deploy()), 900);
+    // 金曜のデプロイはバナーでも触れているので、締めの一言もそれに合わせる
+    const followup = t.getDay() === 5 ? ["インフラ担当", "金曜夕方のデプロイを成功させた人、初めて見ました"] : draw.followup();
+    setTimeout(() => chat(...followup), 2600);
   });
 
   function split() {
@@ -1225,7 +1383,7 @@ body.flow .cores i { background: var(--violet); }
   const missionEl = $("#mission");
   function startMission() {
     if (mission) return;
-    const m = pick(MISSIONS);
+    const m = draw.mission();
     mission = { m, progress: 0, end: performance.now() + 20000 };
     $("#mTitle").textContent = m.title;
     missionEl.hidden = false;
@@ -1246,11 +1404,11 @@ body.flow .cores i { background: var(--violet); }
       flash(COLORS[4]);
       confetti();
       fanfare();
-      setTimeout(() => chat(m.from, pick(["助かった…！本当にありがとう", "神か…", "今の、録画しておけばよかった", "あとで焼肉おごります"])), 1000);
+      setTimeout(() => chat(m.from, m.from === "AI" ? draw.aiThanks() : draw.thanks()), 1000);
     } else {
       term(`… TIMEOUT: ${m.title}`, "warn");
       banner("TIME UP", "…と思ったら、あなたが昨日書いたコードがもう自動で解決していた", "warn");
-      setTimeout(() => chat(m.from, "あれ、もう直ってる…？さすがです"), 1200);
+      setTimeout(() => chat(m.from, m.from === "AI" ? draw.aiTimeout() : draw.timeout()), 1200);
     }
   }
 
