@@ -42,6 +42,21 @@ const PROJECTS = [
     licenseFiles: ["LICENSE.txt"], files: ["Source", "Sink", "Timeout", "Segment", "SegmentPool", "ByteString", "BufferedSource", "Buffer"].map((n) => `okio/src/commonMain/kotlin/okio/${n}.kt`) },
   { id: "nvm", name: "nvm", lang: "Shell", repo: "nvm-sh/nvm", ref: "v0.40.8", license: "MIT",
     licenseFiles: ["LICENSE.md"], files: ["nvm-exec", "bash_completion", "install.sh", "nvm.sh"] },
+  // dio はモノレポなので、パッケージ本体（dio/）配下のライセンスとソースを指定する
+  { id: "dio", name: "Dio", lang: "Dart", repo: "cfug/dio", ref: "dio_v5.11.1", license: "MIT",
+    licenseFiles: ["dio/LICENSE"], files: ["dio.dart", "src/cancel_token.dart", "src/headers.dart", "src/options.dart", "src/response.dart", "src/dio_exception.dart", "src/interceptor.dart", "src/dio_mixin.dart"].map((n) => `dio/lib/${n}`) },
+  // Apache-2.0 は NOTICE の同梱を求めるため、NOTICE があるプロジェクトはライセンスと一緒に収録する
+  { id: "circe", name: "circe", lang: "Scala", repo: "circe/circe", ref: "v0.14.17", license: "Apache-2.0",
+    licenseFiles: ["LICENSE", "NOTICE"], files: ["Error", "CursorOp", "KeyEncoder", "KeyDecoder", "JsonObject", "Json", "Encoder", "Decoder"].map((n) => `modules/core/shared/src/main/scala/io/circe/${n}.scala`) },
+  { id: "sdwebimage", name: "SDWebImage", lang: "Objective-C", repo: "SDWebImage/SDWebImage", ref: "5.21.7", license: "MIT",
+    licenseFiles: ["LICENSE"], files: ["SDWebImageError", "SDWebImageOperation", "SDMemoryCache", "SDDiskCache", "SDImageCacheConfig", "SDImageCache", "SDWebImageDownloaderOperation", "SDWebImageManager"].map((n) => `SDWebImage/Core/${n}.m`) },
+  { id: "plug", name: "Plug", lang: "Elixir", repo: "elixir-plug/plug", ref: "v1.20.3", license: "Apache-2.0",
+    licenseFiles: ["LICENSE"], files: ["plug.ex", "plug/builder.ex", "plug/conn/utils.ex", "plug/request_id.ex", "plug/logger.ex", "plug/router/utils.ex", "plug/conn.ex", "plug/router.ex"].map((n) => `lib/${n}`) },
+  { id: "mojolicious", name: "Mojolicious", lang: "Perl", repo: "mojolicious/mojo", ref: "v9.49", license: "Artistic-2.0",
+    // Perl モジュールは後半が POD ドキュメントなので、抜粋の 320 行がほぼコードで埋まる長めのモジュールを選んでいる
+    licenseFiles: ["LICENSE"], files: ["Mojo/JSON", "Mojo/DOM/HTML", "Mojo/DOM/CSS", "Mojo/DOM", "Mojo/UserAgent/Transactor", "Mojo/UserAgent", "Mojolicious/Controller", "Mojolicious/Plugin/DefaultHelpers", "Mojo/Util"].map((n) => `lib/${n}.pm`) },
+  { id: "chezscheme", name: "Chez Scheme", lang: "Scheme", repo: "cisco/ChezScheme", ref: "v10.4.1", license: "Apache-2.0",
+    licenseFiles: ["LICENSE", "NOTICE"], files: ["fxmap", "enum", "engine", "date", "pretty", "cpletrec", "cp0", "syntax"].map((n) => `s/${n}.ss`) },
 ];
 
 const exists = (p) => access(p).then(() => true, () => false);

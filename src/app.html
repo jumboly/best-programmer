@@ -439,43 +439,41 @@ body.flow .cores i { background: var(--violet); }
   const PROJECTS = DATA.projects;
 
   // ---------------------------------------------------------------- syntax highlighting
-  // 言語ごとの差分だけを持たせ、トークナイザ本体は共通化する
-  const C_LIKE = { block: true, line: ["//"], chars: true };
+  // 言語ごとの差分だけを持たせ、トークナイザ本体は共通化する。
+  // キーワードも言語ごとに持たせる（全言語共通にすると、ある言語の予約語が別の言語の変数名まで色付けしてしまうため）
+  const words = (s) => new Set(s.trim().split(/\s+/));
+  const C_KW = "auto break case char const continue default do double else enum extern float for goto if inline int long register restrict return short signed sizeof static struct switch typedef union unsigned void volatile while NULL true false bool";
+  const JS_KW = "async await break case catch class const continue debugger default delete do else export extends finally for from function if import in instanceof let new of return static super switch this throw try typeof var void while with yield true false null undefined get set";
+  const CB = ["/*", "*/"];
+  const C_LIKE = { block: CB, line: ["//"], chars: true, kw: words(C_KW) };
   const LANG = {
     C: { ...C_LIKE, pre: true },
-    "C++": { ...C_LIKE, pre: true },
-    "C#": { ...C_LIKE, pre: true, verbatim: true },
-    Java: { ...C_LIKE, anno: true },
-    JavaScript: { block: true, line: ["//"], tpl: true },
-    TypeScript: { block: true, line: ["//"], tpl: true, anno: true },
-    Python: { line: ["#"], triple: true, anno: true },
-    Go: { ...C_LIKE, tpl: true },
-    Rust: { ...C_LIKE, attr: true },
-    Ruby: { line: ["#"], sym: true, vars: /^[@$][A-Za-z_]\w*/ },
-    PHP: { block: true, line: ["//", "#"], vars: /^\$[A-Za-z_]\w*/ },
-    Swift: { block: true, line: ["//"], anno: true },
-    Kotlin: { ...C_LIKE, anno: true, triple: true },
-    Shell: { line: ["#"], shell: true, tpl: true, vars: /^\$(?:\{[^}]*\}?|[A-Za-z_]\w*|[0-9@#?*!$-])/ },
+    "C++": { ...C_LIKE, pre: true, kw: words(C_KW + " class namespace template typename public private protected virtual override final explicit operator new delete this throw try catch noexcept constexpr nullptr using friend mutable static_cast dynamic_cast reinterpret_cast const_cast decltype") },
+    "C#": { ...C_LIKE, pre: true, verbatim: true, kw: words("abstract as base bool break byte case catch char checked class const continue decimal default delegate do double else enum event explicit extern false finally fixed float for foreach goto if implicit in int interface internal is lock long namespace new null object operator out override params private protected public readonly ref return sbyte sealed short sizeof stackalloc static string struct switch this throw true try typeof uint ulong unchecked unsafe ushort using var virtual void volatile while get set value async await yield where nameof record init when") },
+    Java: { ...C_LIKE, anno: true, kw: words("abstract assert boolean break byte case catch char class const continue default do double else enum extends final finally float for goto if implements import instanceof int interface long native new package private protected public return short static strictfp super switch synchronized this throw throws transient try void volatile while true false null var record sealed permits yield") },
+    JavaScript: { block: CB, line: ["//"], tpl: true, kw: words(JS_KW) },
+    TypeScript: { block: CB, line: ["//"], tpl: true, anno: true, kw: words(JS_KW + " abstract as declare enum implements interface keyof namespace private protected public readonly satisfies type unique infer is any unknown never string number boolean symbol bigint object override") },
+    Python: { line: ["#"], triple: true, anno: true, kw: words("False None True and as assert async await break class continue def del elif else except finally for from global if import in is lambda nonlocal not or pass raise return try while with yield match case self cls") },
+    Go: { ...C_LIKE, tpl: true, kw: words("break case chan const continue default defer else fallthrough for func go goto if import interface map package range return select struct switch type var true false nil iota") },
+    Rust: { ...C_LIKE, attr: true, kw: words("as async await break const continue crate dyn else enum extern false fn for if impl in let loop match mod move mut pub ref return self Self static struct super trait true type unsafe use where while") },
+    Ruby: { line: ["#"], sym: true, vars: /^[@$][A-Za-z_]\w*/, kw: words("BEGIN END alias and begin break case class def do else elsif end ensure false for if in module next nil not or redo rescue retry return self super then true undef unless until when while yield require require_relative attr_reader attr_writer attr_accessor private protected public include extend raise lambda proc") },
+    PHP: { block: CB, line: ["//", "#"], vars: /^\$[A-Za-z_]\w*/, kw: words("abstract and array as break callable case catch class clone const continue declare default do echo else elseif empty extends final finally fn for foreach function global goto if implements include include_once instanceof insteadof interface isset list match namespace new or print private protected public readonly require require_once return static switch throw trait try unset use var while xor yield true false null self parent int string bool float void mixed") },
+    Swift: { block: CB, line: ["//"], anno: true, kw: words("associatedtype class deinit enum extension fileprivate func import init inout internal let open operator private protocol public rethrows static struct subscript typealias var break case continue default defer do else fallthrough for guard if in repeat return switch where while as catch false is nil super self Self throw throws true try async await some any weak unowned lazy final override mutating convenience required") },
+    Kotlin: { ...C_LIKE, anno: true, triple: true, kw: words("as break class continue do else false for fun if in interface is null object package return super this throw true try typealias typeof val var when while by catch constructor finally get import init set where abstract actual annotation companion const crossinline data enum expect external final infix inline inner internal lateinit noinline open operator out override private protected public reified sealed suspend tailrec vararg value") },
+    Shell: { line: ["#"], shell: true, tpl: true, vars: /^\$(?:\{[^}]*\}?|[A-Za-z_]\w*|[0-9@#?*!$-])/, kw: words("if then else elif fi case esac for select while until do done in function time local export return shift readonly declare unset break continue exit source echo printf test true false eval exec set trap") },
+    // Dart は文字列に ' を多用するので、C 系の文字リテラル扱い（chars）を外す
+    Dart: { block: CB, line: ["//"], triple: true, anno: true, kw: words("abstract as assert async await base break case catch class const continue covariant default deferred do dynamic else enum export extends extension external factory false final finally for get hide if implements import in interface is late library mixin new null on operator part required rethrow return sealed set show static super switch sync this throw true try typedef var void when while with yield") },
+    Scala: { ...C_LIKE, anno: true, triple: true, kw: words("abstract case catch class def do else enum export extends false final finally for forSome given if implicit import lazy match new null object override package private protected return sealed super then this throw trait true try type using val var while with yield") },
+    // @interface などのディレクティブを anno で拾う。@"..." は @ の直後が英字でないので文字列として残る
+    "Objective-C": { ...C_LIKE, pre: true, anno: true, kw: words(C_KW + " id BOOL YES NO nil Nil self super instancetype nonatomic atomic strong weak copy assign readonly readwrite nullable nonnull __block __weak __strong SEL IMP Class") },
+    // @moduledoc などのモジュール属性は anno、:atom は sym で色付けする
+    Elixir: { line: ["#"], triple: true, anno: true, sym: true, kw: words("after alias and case catch cond def defdelegate defexception defguard defimpl defmacro defmacrop defmodule defoverridable defp defprotocol defstruct do else end false fn for if import in nil not or quote raise receive require rescue reraise throw true try unless unquote use when with") },
+    // $#array や @$ref のように記号が続く変数があり、ここで拾わないと # がコメント扱いされてしまう
+    Perl: { line: ["#"], pod: true, vars: /^\$#(?=[{$\w])|^[$@%]\$*(?:\^\w|[A-Za-z_]\w*(?:::\w+)*|\d+|[!@\/\\,;.&+_0])/,
+      kw: words("my our local sub package use no require return if elsif else unless while until for foreach last next redo do eval die warn print say defined undef ref bless shift push pop unshift splice keys values each exists delete scalar wantarray and or not eq ne lt gt le ge cmp qw qq qr BEGIN END __PACKAGE__ __END__ has") },
+    // Lisp 系は識別子に - ? ! * / などを含み、( の直後が関数呼び出しになるので専用の扱い（lisp）をする
+    Scheme: { block: ["#|", "|#"], line: [";"], lisp: true, kw: words("define define-syntax define-record-type define-who lambda case-lambda let let* letrec letrec* let-values let*-values named-lambda rec if cond case else when unless and or not begin do set! quote quasiquote unquote unquote-splicing syntax-rules syntax-case with-syntax syntax quasisyntax identifier-syntax module import export library include let-syntax letrec-syntax fluid-let parameterize guard delay force values call-with-values dynamic-wind call/cc") },
   };
-  const KW = new Set((
-    // C / C++ / C#
-    "auto break case char const continue default do double else enum extern float for goto if inline int long register restrict return short signed sizeof static struct switch typedef union unsigned void volatile while " +
-    "class namespace template typename public private protected virtual override final explicit operator new delete this throw try catch noexcept constexpr nullptr using friend mutable bool true false " +
-    "abstract as base checked decimal delegate event fixed foreach implicit in interface internal is lock null object out params readonly ref sbyte sealed stackalloc string uint ulong unchecked unsafe ushort var get set value async await yield where " +
-    // Java / Kotlin / Swift
-    "boolean byte extends implements import instanceof native package strictfp super synchronized throws transient " +
-    "fun val when init companion data sealed suspend open lateinit internal reified inline crossinline typealias " +
-    "func let guard defer extension protocol self Self init deinit subscript associatedtype fileprivate weak mutating some any nil throws rethrows " +
-    // JS / TS / Go / Rust
-    "function const export from of typeof undefined declare type keyof readonly satisfies " +
-    "chan go map range select struct fallthrough " +
-    "fn impl mod pub crate trait move dyn loop match mut " +
-    // Python / Ruby / PHP / Shell
-    "def lambda pass raise except finally elif not and or with global nonlocal del assert None True False " +
-    "end begin rescue ensure module unless until then do elsif alias undef require attr_reader attr_accessor " +
-    "echo require_once include_once array callable " +
-    "fi esac done local export return shift"
-  ).split(" "));
 
   // 1 行ぶんを HTML 化する。st は前の行から続く複数行コメント／文字列の状態
   function hl(line, lang, st) {
@@ -488,13 +486,18 @@ body.flow .cores i { background: var(--violet); }
       put(st.cls, line.slice(0, j + st.end.length));
       st = null;
     }
+    // POD は =head1 などで始まり =cut で終わる行単位のドキュメント
+    if (L.pod && !i && /^=[A-Za-z]/.test(line)) {
+      put("c", line);
+      return [out, line.startsWith("=cut") ? null : { end: "=cut", cls: "c" }];
+    }
     while (i < line.length) {
       const rest = line.slice(i), c = line[i], prev = line[i - 1] || "";
       let m;
-      if (L.block && rest.startsWith("/*")) {
-        const j = rest.indexOf("*/", 2);
-        if (j < 0) { put("c", rest); return [out, { end: "*/", cls: "c" }]; }
-        put("c", rest.slice(0, j + 2)); continue;
+      if (L.block && rest.startsWith(L.block[0])) {
+        const [open, end] = L.block, j = rest.indexOf(end, open.length);
+        if (j < 0) { put("c", rest); return [out, { end, cls: "c" }]; }
+        put("c", rest.slice(0, j + end.length)); continue;
       }
       if (L.triple && (rest.startsWith('"""') || rest.startsWith("'''"))) {
         const q = rest.slice(0, 3), j = rest.indexOf(q, 3);
@@ -507,6 +510,17 @@ body.flow .cores i { background: var(--violet); }
       if (L.anno && (m = /^@[A-Za-z_][\w.]*/.exec(rest))) { put("a", m[0]); continue; }
       if (L.vars && (m = L.vars.exec(rest))) { put("v", m[0]); continue; }
       if (L.sym && (m = /^:[A-Za-z_]\w*[?!]?/.exec(rest)) && !/[\w:]/.test(prev)) { put("n", m[0]); continue; }
+      if (L.lisp) {
+        // #t / #\a / #x1F などのリテラル。' ` , はクォート記号であって文字列の開始ではない
+        if ((m = /^#(?:\\(?:x[0-9a-fA-F]+|[A-Za-z]+|.)|[tf](?![\w-])|true|false|[xbod][0-9a-fA-F]+)/.exec(rest))) { put("n", m[0]); continue; }
+        if ("'`,".includes(c)) { put("p", c); continue; }
+        if ((m = /^[^\s()[\]{}";'`,|#][^\s()[\]{}";'`,|]*/.exec(rest))) {
+          // [ の直後は let の束縛や cond の節なので、関数呼び出しとみなすのは ( の直後だけにする
+          const id = m[0], before = line.slice(0, i).trimEnd().slice(-1);
+          const cls = /^[-+]?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?$/i.test(id) ? "n" : L.kw.has(id) ? "k" : before === "(" ? "f" : "";
+          put(cls, id); continue;
+        }
+      }
       if (c === '"' || (c === "`" && L.tpl) || (c === "'" && !L.chars)) {
         // 行をまたぐテンプレート文字列は稀なので、行末で打ち切る簡略化をしている
         let j = i + 1;
@@ -517,7 +531,7 @@ body.flow .cores i { background: var(--violet); }
       if (!/\w/.test(prev) && (m = /^(?:0[xX][0-9a-fA-F_]+|\d[\d_]*(?:\.\d+)?(?:[eE][+-]?\d+)?)[A-Za-z]*/.exec(rest))) { put("n", m[0]); continue; }
       if ((m = /^[A-Za-z_]\w*/.exec(rest))) {
         const id = m[0], next = line.slice(i + id.length);
-        const cls = KW.has(id) ? "k" : /^[A-Z]/.test(id) ? "t" : /^!?\(/.test(next) ? "f" : "";
+        const cls = L.kw.has(id) ? "k" : /^[A-Z]/.test(id) ? "t" : /^!?\(/.test(next) ? "f" : "";
         put(cls, id); continue;
       }
       if ((m = /^\s+/.exec(rest))) { put("", m[0]); continue; }
@@ -926,7 +940,7 @@ body.flow .cores i { background: var(--violet); }
     [300, "STAFF", "設計判断を任される"],
     [600, "PRINCIPAL", "社内に伝説が語り継がれる"],
     [1200, "10x ENGINEER", "採用ページの顔になる"],
-    [2500, "POLYGLOT", "14 言語を自在に操る"],
+    [2500, "POLYGLOT", `${PROJECTS.length} 言語を自在に操る`],
     [5000, "LEGEND", "OSS の README に名前が載る"],
   ];
   const PRAISE = [
@@ -1055,6 +1069,12 @@ body.flow .cores i { background: var(--violet); }
     Swift: ["swift build -c release", "swift test", "swiftc"],
     Kotlin: ["./gradlew assemble", "./gradlew allTests", "kotlinc"],
     Shell: ["shellcheck *.sh", "make test", "check"],
+    Dart: ["dart compile exe bin/main.dart", "dart test", "dart2aot"],
+    Scala: ["sbt compile", "sbt test", "scalac"],
+    "Objective-C": ["xcodebuild -scheme SDWebImage build", "xcodebuild test", "clang"],
+    Elixir: ["mix compile", "mix test", "Compiling"],
+    Perl: ["perl Makefile.PL && make", "prove -lr t", "perl -c"],
+    Scheme: ["./configure && make", "make test", "compile"],
   };
   const BEHAVIORS = ["handles empty input", "is thread-safe", "round-trips unicode", "survives 10k concurrent calls", "rejects malformed data",
     "keeps ordering stable", "frees every allocation", "matches the spec", "recovers after timeout", "streams without buffering"];
@@ -1380,7 +1400,7 @@ body.flow .cores i { background: var(--violet); }
 
   // ---------------------------------------------------------------- boot
   preview(Math.floor(Math.random() * PROJECTS.length));
-  term("flowstate workspace — 14 languages, 14 open source projects", "dim");
+  term(`flowstate workspace — ${PROJECTS.length} languages, ${PROJECTS.length} open source projects`, "dim");
   cmd("git pull --rebase");
   term("Already up to date.", "dim");
   requestAnimationFrame(frame);

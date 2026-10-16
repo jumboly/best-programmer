@@ -38,5 +38,11 @@ main ブランチに push すると、GitHub Actions（`.github/workflows/pages.
 | Swift | Alamofire | MIT |
 | Kotlin | Okio | Apache-2.0 |
 | Shell | nvm | MIT |
+| Dart | Dio | MIT |
+| Scala | circe | Apache-2.0 |
+| Objective-C | SDWebImage | MIT |
+| Elixir | Plug | Apache-2.0 |
+| Perl | Mojolicious | Artistic-2.0 |
+| Scheme | Chez Scheme | Apache-2.0 |
 
 各ファイルは指定タグ時点のものを先頭から最大 320 行まで無改変で抜粋しています。ライセンスファイルは全文を収録し、アプリ内の「ライセンス」（F7）と `THIRD_PARTY_NOTICES.md` で表示しています。プロジェクトやタグを変えるときは `tools/build.mjs` の `PROJECTS` を編集してください。
