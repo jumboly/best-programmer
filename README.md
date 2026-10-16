@@ -3,7 +3,7 @@
 キーボードを叩くだけで、映画に出てくる凄腕プログラマーの気分を味わえるブラウザアプリ。
 実在するオープンソースのコードが 1 ファイルずつ書き上がっていき、プロジェクトが組み上がっていきます。
 
-**遊ぶ**: https://jumboly.github.io/best-programmer/
+**遊ぶ**: https://www.jumboly.jp/best-programmer/
 
 ## ビルド
 
